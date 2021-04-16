@@ -1,4 +1,4 @@
-# common-github-mock
+# clj-github-mock
 
 `clj-github-mock` provides a `ring` like handler that emulates the github api.
 Since most clojure http servers are compatible with the `ring` protocol,
