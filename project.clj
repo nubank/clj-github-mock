@@ -17,7 +17,7 @@
             [s3-wagon-private "1.3.2" :exclusions [commons-logging org.apache.httpcomponents/httpclient]]
             [lein-ancient "0.6.14" :exclusions [commons-logging com.fasterxml.jackson.core/jackson-databind com.fasterxml.jackson.core/jackson-core]]]
 
-  :dependencies [[org.clojure/clojure "1.10.0"]
+  :dependencies [[org.clojure/clojure "1.10.3"]
                  [org.eclipse.jgit/org.eclipse.jgit "5.9.0.202009080501-r"]
                  [metosin/reitit-ring "0.5.10"]
                  [base64-clj "0.1.1"]

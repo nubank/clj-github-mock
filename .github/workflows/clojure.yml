@@ -23,14 +23,8 @@ jobs:
     - name: Install dependencies
       run: lein deps
 
-    - name: Run midje tests
-      run: lein midje
-
     - name: Run clj tests
       run: lein test
-
-    - name: Run cljs tests
-      run: lein test-node
 
   test-using-java-11:
     name: 'Test using Java 11'
@@ -48,11 +42,5 @@ jobs:
     - name: Install dependencies
       run: lein deps
 
-    - name: Run midje tests
-      run: lein midje
-
     - name: Run clj tests
       run: lein test
-
-    - name: Run cljs tests
-      run: lein test-node
