@@ -1,11 +1,11 @@
 (ns clj-github-mock.impl.jgit-test
   (:require  [base64-clj.core :as base64]
+             [clj-github-mock.impl.jgit :as sut]
              [clojure.test :refer :all]
              [clojure.test.check.clojure-test :refer [defspec]]
              [clojure.test.check.generators :as gen]
              [clojure.test.check.properties :as prop]
              [clojure.walk :as walk]
-             [clj-github-mock.impl.jgit :as sut]
              [editscript.core :as editscript]
              [lambdaisland.regal.generator :as rg]
              [malli.generator :as mg]
