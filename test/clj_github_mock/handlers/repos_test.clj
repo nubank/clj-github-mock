@@ -1,6 +1,7 @@
 (ns clj-github-mock.handlers.repos-test
   (:require [base64-clj.core :as base64]
             [cheshire.core :as json]
+            [clj-github-mock.core :refer [ring-handler]]
             [clj-http.client :as http]
             [clj-http.fake :refer [with-fake-routes]]
             [clojure.data :as data]
@@ -11,7 +12,6 @@
             [clojure.test.check.generators :as gen]
             [clojure.test.check.properties :as prop]
             [clojure.walk :as walk]
-            [clj-github-mock.core :refer [ring-handler]]
             [lambdaisland.regal.generator :as rg]
             [malli.core :as m]
             [malli.generator :as mg]

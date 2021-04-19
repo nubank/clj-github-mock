@@ -1,7 +1,7 @@
 (ns clj-github-mock.handlers.repos
-  (:require [clojure.string :as string]
-            [clj-github-mock.impl.database :as database]
-            [clj-github-mock.impl.jgit :as jgit]))
+  (:require [clj-github-mock.impl.database :as database]
+            [clj-github-mock.impl.jgit :as jgit]
+            [clojure.string :as string]))
 
 (defn repo-body [org-name {repo-name :repo/name attrs :repo/attrs}]
   (merge
