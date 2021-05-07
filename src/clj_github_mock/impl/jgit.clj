@@ -1,11 +1,14 @@
 (ns clj-github-mock.impl.jgit
   (:require [base64-clj.core :as base64]
             [clojure.set :as set]
-            [clojure.string :as string])
+            [clojure.string :as string]
+            [clojure.java.io :as io])
   (:import [org.eclipse.jgit.internal.storage.dfs DfsRepositoryDescription InMemoryRepository]
            [org.eclipse.jgit.lib AnyObjectId CommitBuilder Constants FileMode ObjectId ObjectReader PersonIdent TreeFormatter]
            [org.eclipse.jgit.revwalk RevCommit]
-           [org.eclipse.jgit.treewalk TreeWalk]))
+           [org.eclipse.jgit.treewalk TreeWalk]
+           [java.util.zip ZipEntry ZipOutputStream]
+           [java.io ByteArrayInputStream ByteArrayOutputStream]))
 
 (defn empty-repo []
   (InMemoryRepository. (DfsRepositoryDescription.)))
@@ -211,3 +214,38 @@
         {:type "file"
          :path path
          :content (base64/encode content "UTF-8")}))))
+
+(defn- get-blob-byte-array [repo sha]
+  (load-object (new-reader repo) (ObjectId/fromString sha)))
+
+(defn- zip-blob! [repo parent-path zout {:keys [path sha]}]
+  (let [entry (ZipEntry. (str parent-path path))]
+    (.putNextEntry zout entry)
+    (io/copy (get-blob-byte-array repo sha) zout)))
+
+(declare ^:private zip-tree-seq!)
+
+(defn- zip-tree! [repo parent-path zout {:keys [path sha]}]
+  (let [full-path (str parent-path "/" path "/")
+        entry (ZipEntry. full-path)]
+    (.putNextEntry zout entry)
+    (.closeEntry zout)
+    (zip-tree-seq! repo full-path zout (tree-walk-seq (tree-walk repo sha)))))
+
+(defn- zip-tree-seq! [repo parent-path zout tree-seq]
+  (doseq [{:keys [type] :as item} tree-seq]
+    (case type
+      "tree" (zip-tree! repo parent-path zout item)
+      "blob" (zip-blob! repo parent-path zout item))))
+
+(defn get-commit-zipball [repo org repo-name sha]
+  (with-open [out (ByteArrayOutputStream.)
+              zout (ZipOutputStream. out)]
+    (let [parent-path (str "/" org "-" repo-name "-" sha "/")
+          {:keys [tree]} (get-commit repo sha)
+          tree-seq (tree-walk-seq (tree-walk repo (:sha tree)))]
+      (.putNextEntry zout (ZipEntry. parent-path))
+      (.closeEntry zout)
+      (zip-tree-seq! repo parent-path zout tree-seq)
+      (.finish zout)
+      (ByteArrayInputStream. (.toByteArray out)))))

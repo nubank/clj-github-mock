@@ -111,6 +111,16 @@
        :body content}
       {:status 404})))
 
+(defn get-zipball-handler [{{git-repo :repo/jgit
+                             {:keys [default_branch]} :repo/attrs} :repo
+                            {:keys [org repo ref]} :path-params}]
+  (let [sha (content-sha git-repo ref default_branch)]
+    (if sha
+      {:status 200
+       :headers {:content-type "application/zip"}
+       :body (jgit/get-commit-zipball git-repo org repo sha)}
+      {:status 404})))
+
 (defn repo-middleware [handler]
   (fn [{database :database {:keys [org repo]} :path-params :as request}]
     (let [repo (database/find-repo database org repo)]
@@ -131,4 +141,6 @@
                        :delete delete-ref-handler}]
     ["/git/ref/*ref" {:get get-ref-handler}]
     ["/branches/:branch" {:get get-branch-handler}]
-    ["/contents/*path" {:get get-content-handler}]]])
+    ["/contents/*path" {:get get-content-handler}]
+    ["/zipball" {:get get-zipball-handler}]
+    ["/zipball/*ref" {:get get-zipball-handler}]]])
