@@ -226,7 +226,7 @@
 (declare ^:private zip-tree-seq!)
 
 (defn- zip-tree! [repo parent-path zout {:keys [path sha]}]
-  (let [full-path (str parent-path "/" path "/")
+  (let [full-path (str parent-path path "/")
         entry (ZipEntry. full-path)]
     (.putNextEntry zout entry)
     (.closeEntry zout)
@@ -241,7 +241,7 @@
 (defn get-commit-zipball [repo org repo-name sha]
   (with-open [out (ByteArrayOutputStream.)
               zout (ZipOutputStream. out)]
-    (let [parent-path (str "/" org "-" repo-name "-" sha "/")
+    (let [parent-path (str org "-" repo-name "-" sha "/")
           {:keys [tree]} (get-commit repo sha)
           tree-seq (tree-walk-seq (tree-walk repo (:sha tree)))]
       (.putNextEntry zout (ZipEntry. parent-path))

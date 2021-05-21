@@ -1,6 +1,7 @@
 (ns clj-github-mock.impl.jgit-test
   (:require  [base64-clj.core :as base64]
              [clj-github-mock.impl.jgit :as sut]
+             [clojure.java.io :as io]
              [clojure.test :refer :all]
              [clojure.test.check.clojure-test :refer [defspec]]
              [clojure.test.check.generators :as gen]
@@ -9,7 +10,10 @@
              [editscript.core :as editscript]
              [lambdaisland.regal.generator :as rg]
              [malli.generator :as mg]
-             [matcher-combinators.standalone :refer [match?]]))
+             [matcher-combinators.standalone :refer [match?]]
+             [matcher-combinators.matchers :as matchers])
+  (:import [java.util.zip ZipInputStream]
+           [java.io ByteArrayInputStream ByteArrayOutputStream]))
 
 (defn decode-base64 [content]
   (if (empty? content)
@@ -178,3 +182,40 @@
                   :content (base64/encode (:content %) "UTF-8")}
                  (sut/get-content repo sha (:path %)))
              tree))))
+
+(defn- slurp-entry [zip-input-stream]
+  (with-open [out (ByteArrayOutputStream.)]
+    (io/copy zip-input-stream out)
+    (String. (.toByteArray out) "UTF-8")))
+
+(defn- tree-item [zip-input-stream]
+  (when-let [entry (.getNextEntry zip-input-stream)]
+    (if (.isDirectory entry)
+      {:directory? true}
+      {:path (->> (.getName entry) (re-find #"^[\w|-]+\/(.*)") second)
+       :mode "100644"
+       :type "blob"
+       :content (slurp-entry zip-input-stream)})))
+
+(defn- zip->tree [zip-input-stream]
+  (lazy-seq
+   (if-let [entry (tree-item zip-input-stream)]
+     (if (:directory? entry)
+       (zip->tree zip-input-stream)
+       (cons entry (zip->tree zip-input-stream)))
+     [])))
+
+(defn- is->tree [input-stream]
+  (zip->tree (ZipInputStream. input-stream)))
+
+(defspec can-get-commit-zipball
+  10
+  (prop/for-all
+   [tree github-tree-gen]
+   (= (set tree)
+      (let [repo (sut/empty-repo)
+                 {tree-sha :sha} (sut/create-tree! repo {:tree tree})
+                 {:keys [sha]} (sut/create-commit! repo {:tree tree-sha :message "test" :parents []})]
+             (-> (sut/get-commit-zipball repo "nubank" "some-repo" sha)
+                 is->tree
+                 set)))))
