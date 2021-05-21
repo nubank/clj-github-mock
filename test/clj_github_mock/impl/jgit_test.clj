@@ -10,8 +10,7 @@
              [editscript.core :as editscript]
              [lambdaisland.regal.generator :as rg]
              [malli.generator :as mg]
-             [matcher-combinators.standalone :refer [match?]]
-             [matcher-combinators.matchers :as matchers])
+             [matcher-combinators.standalone :refer [match?]])
   (:import [java.util.zip ZipInputStream]
            [java.io ByteArrayInputStream ByteArrayOutputStream]))
 
