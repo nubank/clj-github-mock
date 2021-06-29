@@ -34,7 +34,7 @@
     (vector? foreign-key-val) (into #{} (map (partial foreign-key-ent path) foreign-key-val))
     :else {foreign-key-attr foreign-key-val}))
 
-(defn assoc-ent-at-foreign-keys [db {:keys [ent-type visit-key visit-val] :as visit-data}]
+(defn assoc-ent-at-foreign-keys [db {:keys [ent-type visit-val]}]
   (reduce
    (fn [acc [attr relation-path]]
      (update acc attr (partial foreign-key-ent relation-path)))
