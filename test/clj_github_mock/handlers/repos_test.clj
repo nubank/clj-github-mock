@@ -18,7 +18,6 @@
             [matcher-combinators.standalone :refer [match?]]
             [matcher-combinators.test]
             [clj-github-mock.generators :as mock-gen]
-            [clj-github-mock.handlers.repos :as repos]
             [ring.mock.request :as mock]
             [reifyhealth.specmonstah.core :as sm]))
 
@@ -89,23 +88,35 @@
 (defn list-org-repos [org-name]
   (request {:path (org-repos-path org-name)}))
 
+(defn org-name [ent-db ent]
+  (:org/name (sm/ent-attr ent-db ent :malli-gen)))
+
+(defn list-org-repos-request [org-name]
+  (mock/request :get (org-repos-path org-name)))
+
 (defspec list-org-repos-respects-response-schema
   10
   (prop/for-all
    [{:keys [handler ent-db]} (mock-gen/database-gen {:org [[:some-org]]
                                                      :repo [[3 {:refs {:repo/org :some-org}}]]})]
-   (let [org-name (:org/name (sm/ent-attr ent-db :some-org :malli-gen))]
+   (let [org (org-name ent-db :some-org)]
      (m/validate list-org-repos-response-schema
-                 (handler (mock/request :get (org-repos-path org-name)))))))
+                 (handler (list-org-repos-request org))))))
 
 (defspec list-org-repos-return-all-repos
   10
   (prop/for-all
-   [orgs orgs-gen]
-   (with-handler {:orgs orgs}
+   [{:keys [handler ent-db]} (mock-gen/database-gen {:org [[:org1]
+                                                           [:org2]
+                                                           [:org3]]
+                                                     :repo [[2 {:refs {:repo/org :org1}}]
+                                                            [2 {:refs {:repo/org :org2}}]
+                                                            [2 {:refs {:repo/org :org3}}]]})]
+   (let [orgs (->> (:org (sm/ents-by-type ent-db))
+                   (map (partial org-name ent-db)))]
      (match? (set (mapcat #(->> % :repos (map (fn [{:keys [name]}]
                                                 {:full_name (string/join "/" [(:name %) name])}))) orgs))
-             (set (mapcat #(:body (list-org-repos (:name %))) orgs))))))
+             (set (mapcat #(:body (handler (list-org-repos-request (:name %)))) orgs))))))
 
 (def create-org-repo-response-schema
   [:map
