@@ -16,7 +16,11 @@
             [malli.core :as m]
             [malli.generator :as mg]
             [matcher-combinators.standalone :refer [match?]]
-            [matcher-combinators.test]))
+            [matcher-combinators.test]
+            [clj-github-mock.generators :as mock-gen]
+            [clj-github-mock.handlers.repos :as repos]
+            [ring.mock.request :as mock]
+            [reifyhealth.specmonstah.core :as sm]))
 
 (defn github-url [endpoint]
   (str "https://api.github.com" endpoint))
@@ -88,10 +92,11 @@
 (defspec list-org-repos-respects-response-schema
   10
   (prop/for-all
-   [org (org-gen)]
-   (with-handler {:orgs [org]}
+   [{:keys [handler ent-db]} (mock-gen/database-gen {:org [[:some-org]]
+                                                     :repo [[3 {:refs {:repo/org :some-org}}]]})]
+   (let [org-name (:org/name (sm/ent-attr ent-db :some-org :malli-gen))]
      (m/validate list-org-repos-response-schema
-                 (list-org-repos (:name org))))))
+                 (handler (mock/request :get (org-repos-path org-name)))))))
 
 (defspec list-org-repos-return-all-repos
   10

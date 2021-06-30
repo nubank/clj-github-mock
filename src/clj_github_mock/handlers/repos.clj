@@ -1,7 +1,9 @@
 (ns clj-github-mock.handlers.repos
   (:require [clj-github-mock.impl.database :as database]
             [clj-github-mock.impl.jgit :as jgit]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [reitit.ring :as ring]
+            [ring.middleware.params :as middleware.params]))
 
 (defn repo-body [org-name {repo-name :repo/name attrs :repo/attrs}]
   (merge
@@ -132,3 +134,10 @@
     ["/git/ref/*ref" {:get get-ref-handler}]
     ["/branches/:branch" {:get get-branch-handler}]
     ["/contents/*path" {:get get-content-handler}]]])
+
+(defn handler [database]
+  (-> (ring/ring-handler
+       (ring/router routes)
+       (ring/create-default-handler))
+      (middleware.params/wrap-params)
+      (database/middleware database)))

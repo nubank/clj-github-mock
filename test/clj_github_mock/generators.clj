@@ -4,7 +4,9 @@
             [malli.generator :as mg]
             [clj-github-mock.impl.database :as database]
             [datascript.core :as d]
-            [clojure.test.check.generators :as gen]))
+            [clojure.test.check.generators :as gen]
+            [clojure.test.check.rose-tree :as rose]
+            [clj-github-mock.handlers.repos :as repos]))
 
 (defn unique-name-gen []
   (let [names (atom #{})]
@@ -20,13 +22,16 @@
                         [:org/name [:string {:gen/gen (unique-name-gen)}]]]}
    :repo {:prefix :repo
           :malli-schema [:map
-                         [:repo/name [:string {:gen/gen (unique-name-gen)}]]]
+                         [:repo/name [:string {:gen/gen (unique-name-gen)}]]
+                         [:repo/attrs [:map
+                                       [:default_branch [:= "main"]]]]]
           :relations {:repo/org [:org :org/name]}}})
 
 (defn malli-gen-ent-val
-  [ent-db {:keys [ent-name]}]
-  (let [{:keys [malli-schema]} (sm/ent-schema ent-db ent-name)]
-    (mg/generate malli-schema)))
+  [{{:keys [rnd size]} :gen-options :as ent-db} {:keys [ent-name]}]
+  (let [{:keys [malli-schema]} (sm/ent-schema ent-db ent-name)
+        generator (mg/generator malli-schema)]
+    (rose/root (gen/call-gen generator rnd size))))
 
 (defn foreign-key-ent [[_ foreign-key-attr :as path] foreign-key-val]
   (cond
@@ -55,7 +60,14 @@
   (d/transact! database [malli-gen]))
 
 (defn database-gen [query]
-  (let [database (database/create {})]
-    {:conn database
-     :ent-db (-> (ent-db-malli-gen {:schema (schema)} query)
-                 (sm/visit-ents-once :inserted-data (partial insert database)))}))
+  (gen/->Generator
+   (fn [rnd size]
+     (let [database (database/create {})]
+       (rose/pure
+        {:handler (repos/handler database)
+         :database database
+         :ent-db (-> (ent-db-malli-gen {:schema (schema)
+                                        :gen-options {:rnd rnd
+                                                      :size size}}
+                                       query)
+                     (sm/visit-ents-once :inserted-data (partial insert database)))})))))
