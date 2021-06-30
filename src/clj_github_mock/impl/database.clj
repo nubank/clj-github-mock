@@ -5,7 +5,8 @@
 (def repo-defaults {:default_branch "main"})
 
 (defn- repo-datums [org-name repo-name repo-attrs]
-  [{:repo/name repo-name
+  [{:repo/id (str (java.util.UUID/randomUUID))
+    :repo/name repo-name
     :repo/org [:org/name org-name]
     :repo/attrs (merge repo-defaults repo-attrs)
     :repo/jgit (jgit/empty-repo)}])
@@ -19,6 +20,7 @@
 
 (defn create [{:keys [orgs] :as _initial-state}]
   (let [schema {:org/name {:db/unique :db.unique/identity}
+                :repo/id {:db/unique :db.unique/identity}
                 :repo/org {:db/valueType :db.type/ref}}
         conn (d/create-conn schema)]
     (d/transact! conn (mapcat org-datums orgs))
@@ -43,6 +45,9 @@
          [?r :repo/name ?repo-name]
          [?r :repo/org ?org]
          [?org :org/name ?org-name]] @database org-name repo-name))
+
+(defn lookup [database eid]
+  (d/pull @database '[*] eid))
 
 (defn middleware [handler conn]
   (fn [request]
