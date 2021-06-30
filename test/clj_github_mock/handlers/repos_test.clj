@@ -97,26 +97,22 @@
 (defspec list-org-repos-respects-response-schema
   10
   (prop/for-all
-   [{:keys [handler ent-db]} (mock-gen/database-gen {:org [[:some-org]]
-                                                     :repo [[3 {:refs {:repo/org :some-org}}]]})]
-   (let [org (org-name ent-db :some-org)]
-     (m/validate list-org-repos-response-schema
-                 (handler (list-org-repos-request org))))))
+   [{:keys [handler ent-db some-org]} (mock-gen/database-gen {:org [[:some-org]]
+                                                              :repo [[3 {:refs {:repo/org :some-org}}]]})]
+   (m/validate list-org-repos-response-schema
+               (handler (list-org-repos-request (:org/name some-org))))))
 
 (defspec list-org-repos-return-all-repos
   10
   (prop/for-all
-   [{:keys [handler ent-db]} (mock-gen/database-gen {:org [[:org1]
-                                                           [:org2]
-                                                           [:org3]]
-                                                     :repo [[2 {:refs {:repo/org :org1}}]
-                                                            [2 {:refs {:repo/org :org2}}]
-                                                            [2 {:refs {:repo/org :org3}}]]})]
-   (let [orgs (->> (:org (sm/ents-by-type ent-db))
-                   (map (partial org-name ent-db)))]
-     (match? (set (mapcat #(->> % :repos (map (fn [{:keys [name]}]
-                                                {:full_name (string/join "/" [(:name %) name])}))) orgs))
-             (set (mapcat #(:body (handler (list-org-repos-request (:name %)))) orgs))))))
+   [{:keys [handler ent-db ents]} (mock-gen/database-gen {:org [[:org1]
+                                                                [:org2]
+                                                                [:org3]]
+                                                          :repo [[2 {:refs {:repo/org :org1}}]
+                                                                 [2 {:refs {:repo/org :org2}}]
+                                                                 [2 {:refs {:repo/org :org3}}]]})]
+   (match? (set (map :repo/name (:repo ents)))
+           (set (map :name (mapcat #(:body (handler (list-org-repos-request (:org/name %)))) (:org ents)))))))
 
 (def create-org-repo-response-schema
   [:map

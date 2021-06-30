@@ -59,15 +59,33 @@
 (defn insert [database _ {:keys [malli-gen]}]
   (d/transact! database [malli-gen]))
 
+(defn ent-data [ent-db ent]
+  (:malli-gen (sm/ent-attrs ent-db ent)))
+
+(defn ent-attrs-map [ent-db]
+  (let [ents (sm/ents ent-db)]
+    (zipmap ents
+            (map (partial ent-data ent-db) ents))))
+
+(defn ents-attrs-map [ent-db]
+  (let [ents-by-type (sm/ents-by-type ent-db)]
+    (zipmap (keys ents-by-type)
+            (map #(map (partial ent-data ent-db) %)
+                 (vals ents-by-type)))))
+
 (defn database-gen [query]
   (gen/->Generator
    (fn [rnd size]
-     (let [database (database/create {})]
-       (rose/pure
-        {:handler (repos/handler database)
-         :database database
-         :ent-db (-> (ent-db-malli-gen {:schema (schema)
+     (let [database (database/create {})
+           ent-db (-> (ent-db-malli-gen {:schema (schema)
                                         :gen-options {:rnd rnd
                                                       :size size}}
                                        query)
-                     (sm/visit-ents-once :inserted-data (partial insert database)))})))))
+                     (sm/visit-ents-once :inserted-data (partial insert database)))]
+       (rose/pure
+        (merge
+         {:handler (repos/handler database)
+          :database database
+          :ent-db ent-db
+          :ents (ents-attrs-map ent-db)}
+         (ent-attrs-map ent-db)))))))
