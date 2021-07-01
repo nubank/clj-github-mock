@@ -35,19 +35,21 @@
 
 (defn tree->github-tree [tree]
   (if (string? tree)
-    {:tree []}
-    {:tree
-     (->> (walk/postwalk
-           (fn [node]
-             (if (map? node)
-               (into {} (map flatten-obj node))
-               node))
-           #tap tree)
-          (mapv (fn [[path content]]
-                  {:path path
-                   :mode "100644"
-                   :type "blob"
-                   :content content})))}))
+    [{:path "some-file"
+      :mode "100644"
+      :type "blob"
+      :content tree}]
+    (->> (walk/postwalk
+          (fn [node]
+            (if (map? node)
+              (into {} (map flatten-obj node))
+              node))
+          tree)
+         (mapv (fn [[path content]]
+                 {:path path
+                  :mode "100644"
+                  :type "blob"
+                  :content content})))))
 
 (def github-tree
   (gen/fmap tree->github-tree
@@ -116,9 +118,9 @@
   (:datastore (ent-type schema)))
 
 (defn insert-jgit [database ent-db {:keys [ent-type spec-gen]}]
-  (let [repo (:repo/jgit (database/lookup database [:repo/id (:tree/repo spec-gen)]))]
+  (let [repo (:repo/jgit (database/lookup database [:repo/id (:tree/repo #tap spec-gen)]))]
     (merge spec-gen
-           (jgit/create-tree! repo (:tree spec-gen)))))
+           (jgit/create-tree! repo spec-gen))))
 
 (defn insert-datascript [database ent-db {:keys [spec-gen] :as ent-attrs}]
   (let [datoms (assoc-ent-at-foreign-keys ent-db ent-attrs)]

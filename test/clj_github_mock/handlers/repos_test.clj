@@ -108,7 +108,7 @@
                                                                  [2 {:refs {:repo/org :org2}}]
                                                                  [2 {:refs {:repo/org :org3}}]]})]
    (match? (set (map :repo/name (:repo ents)))
-           (set (map :name (mapcat #(:body (handler (list-org-repos-request #tap (:org/name %)))) (:org ents)))))))
+           (set (map :name (mapcat #(:body (handler (list-org-repos-request (:org/name %)))) (:org ents)))))))
 
 (def create-org-repo-response-schema
   [:map
@@ -208,39 +208,6 @@
        (match? [nil {:visibility "private"} any?]
                (data/diff repo-before repo-after))))))
 
-(defn flatten-obj [[obj-name node :as entry]]
-  (if (string? node)
-    entry
-    (into
-     {}
-     (map (fn [[child-name child-node]]
-            [(str obj-name "/" child-name) child-node])
-          (val entry)))))
-
-(defn tree->github-tree [tree]
-  (->> (walk/postwalk
-        (fn [node]
-          (if (map? node)
-            (into {} (map flatten-obj node))
-            node))
-        tree)
-       (map (fn [[path content]]
-              {:path path
-               :mode "100644"
-               :type "blob"
-               :content content}))))
-
-(def github-tree-gen
-  (gen/fmap
-   tree->github-tree
-   (mg/generator [:schema {:registry {::file-content :string
-                                      ::dir [:and
-                                             [:map-of object-name [:ref ::node]]
-                                             [:fn seq]]
-                                      ::node [:or ::file-content ::dir]
-                                      ::root ::dir}}
-                  ::root])))
-
 (defn trees-path [org repo]
   (str "/repos/" org "/" repo "/git/trees"))
 
@@ -267,7 +234,7 @@
   10
   (prop/for-all
    [{:keys [handler database org0 repo0]} (mock-gen/database-gen {:repo [[1]]})
-    tree github-tree-gen]
+    tree mock-gen/github-tree]
    (let [{{:keys [sha]} :body} (handler (create-tree-request (:org/name org0) (:repo/name repo0) {:tree tree}))]
      (-> repo0 :repo/jgit (jgit/get-tree sha)))))
 
@@ -309,7 +276,7 @@
   (prop/for-all
    [org-name object-name-gen
     repo (repo-gen)
-    tree github-tree-gen]
+    tree mock-gen/github-tree]
    (with-handler {:orgs [{:name org-name
                           :repos [repo]}]}
      (let [{{tree-sha :sha} :body} (create-tree org-name (:name repo) {:tree tree})
@@ -332,7 +299,7 @@
   (prop/for-all
    [org-name object-name-gen
     repo (repo-gen)
-    tree github-tree-gen]
+    tree mock-gen/github-tree]
    (with-handler {:orgs [{:name org-name
                           :repos [repo]}]}
      (let [{{tree-sha :sha} :body} (create-tree org-name (:name repo) {:tree tree})
@@ -372,7 +339,7 @@
   (prop/for-all
    [org-name object-name-gen
     repo (repo-gen)
-    tree github-tree-gen
+    tree mock-gen/github-tree
     ref (gen/not-empty gen/string-alphanumeric)]
    (with-handler {:orgs [{:name org-name
                           :repos [repo]}]}
@@ -410,7 +377,7 @@
   (prop/for-all
    [org-name object-name-gen
     repo (repo-gen)
-    tree github-tree-gen
+    tree mock-gen/github-tree
     ref (gen/not-empty gen/string-alphanumeric)]
    (with-handler {:orgs [{:name org-name
                           :repos [repo]}]}
@@ -434,7 +401,7 @@
   (prop/for-all
    [org-name object-name-gen
     repo (repo-gen)
-    tree github-tree-gen
+    tree mock-gen/github-tree
     ref (gen/not-empty gen/string-alphanumeric)]
    (with-handler {:orgs [{:name org-name
                           :repos [repo]}]}
@@ -458,7 +425,7 @@
             :query-params {"ref" ref}}))
 
 (def github-tree+file-gen
-  (gen/let [tree github-tree-gen
+  (gen/let [tree mock-gen/github-tree
             file (gen/elements tree)]
     {:tree tree
      :file file}))
