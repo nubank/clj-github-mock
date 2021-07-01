@@ -13,7 +13,7 @@
             [lambdaisland.regal.generator :as regal-gen]
             [malli.util :as mu]))
 
-(defn unique-name-gen []
+(defn unique-name []
   (let [names (atom #{})]
     (gen/such-that
      #(let [result (@names %)]
@@ -72,12 +72,12 @@
   {:org {:prefix :org
          :datastore :datascript
          :malli-schema [:map
-                        [:org/name [:string {:gen/gen (unique-name-gen)}]]]}
+                        [:org/name [:string {:gen/gen (unique-name)}]]]}
    :repo {:prefix :repo
           :datastore :datascript
           :malli-schema [:map
                          [:repo/id :uuid]
-                         [:repo/name [:string {:gen/gen (unique-name-gen)}]]
+                         [:repo/name [:string {:gen/gen (unique-name)}]]
                          [:repo/attrs [:map
                                        [:default_branch [:= "main"]]]]
                          [:repo/jgit [:any {:gen/fmap (fn [_] (jgit/empty-repo))}]]]
