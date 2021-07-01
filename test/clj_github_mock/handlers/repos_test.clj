@@ -19,7 +19,6 @@
             [matcher-combinators.test]
             [clj-github-mock.generators :as mock-gen]
             [ring.mock.request :as mock]
-            [reifyhealth.specmonstah.core :as sm]
             [clj-github-mock.impl.jgit :as jgit]))
 
 (defn github-url [endpoint]
@@ -89,19 +88,15 @@
 (defn list-org-repos [org-name]
   (request {:path (org-repos-path org-name)}))
 
-(defn org-name [ent-db ent]
-  (:org/name (sm/ent-attr ent-db ent :malli-gen)))
-
 (defn list-org-repos-request [org-name]
   (mock/request :get (org-repos-path org-name)))
 
 (defspec list-org-repos-respects-response-schema
   10
   (prop/for-all
-   [{:keys [handler ent-db some-org]} (mock-gen/database-gen {:org [[:some-org]]
-                                                              :repo [[3 {:refs {:repo/org :some-org}}]]})]
+   [{:keys [handler ent-db org0]} (mock-gen/database-gen {:repo [[3]]})]
    (m/validate list-org-repos-response-schema
-               (handler (list-org-repos-request (:org/name some-org))))))
+               (handler (list-org-repos-request (:org/name org0))))))
 
 (defspec list-org-repos-return-all-repos
   10
@@ -113,7 +108,7 @@
                                                                  [2 {:refs {:repo/org :org2}}]
                                                                  [2 {:refs {:repo/org :org3}}]]})]
    (match? (set (map :repo/name (:repo ents)))
-           (set (map :name (mapcat #(:body (handler (list-org-repos-request (:org/name %)))) (:org ents)))))))
+           (set (map :name (mapcat #(:body (handler (list-org-repos-request #tap (:org/name %)))) (:org ents)))))))
 
 (def create-org-repo-response-schema
   [:map
@@ -265,14 +260,16 @@
 (defn get-tree [org repo tree-sha]
   (request {:path (tree-sha-path org repo tree-sha)}))
 
+(defn get-tree-request [org repo tree-sha]
+  (mock/request :get (tree-sha-path org repo tree-sha)))
+
 (defspec create-tree-adds-tree-to-repo
   10
   (prop/for-all
-   [{:keys [handler database my-org my-repo]} (mock-gen/database-gen {:org [[:my-org]]
-                                                                      :repo [[:my-repo {:refs {:repo/org :my-org}}]]})
+   [{:keys [handler database org0 repo0]} (mock-gen/database-gen {:repo [[1]]})
     tree github-tree-gen]
-   (let [{{:keys [sha]} :body} (handler (create-tree-request (:org/name my-org) (:repo/name my-repo) {:tree tree}))]
-     (-> my-repo :repo/jgit (jgit/get-tree sha)))))
+   (let [{{:keys [sha]} :body} (handler (create-tree-request (:org/name org0) (:repo/name repo0) {:tree tree}))]
+     (-> repo0 :repo/jgit (jgit/get-tree sha)))))
 
 (def get-tree-response-schema
   [:map
@@ -289,14 +286,9 @@
 (defspec get-tree-respects-response-schema
   10
   (prop/for-all
-   [org-name object-name-gen
-    repo (repo-gen)
-    tree github-tree-gen]
-   (with-handler {:orgs [{:name org-name
-                          :repos [repo]}]}
-     (let [{{:keys [sha]} :body} (create-tree org-name (:name repo) {:tree tree})]
-       (m/validate get-tree-response-schema
-                   (get-tree org-name (:name repo) sha))))))
+   [{:keys [handler org0 repo0 tree0]} (mock-gen/database-gen {:tree [[1]]})]
+   (m/validate get-tree-response-schema
+               (handler (get-tree-request (:org/name org0) (:repo/name repo0) (:sha tree0))))))
 
 (defn commits-path [org repo]
   (str "/repos/" org "/" repo "/git/commits"))
