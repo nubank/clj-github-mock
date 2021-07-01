@@ -19,7 +19,8 @@
             [matcher-combinators.test]
             [clj-github-mock.generators :as mock-gen]
             [ring.mock.request :as mock]
-            [reifyhealth.specmonstah.core :as sm]))
+            [reifyhealth.specmonstah.core :as sm]
+            [clj-github-mock.impl.jgit :as jgit]))
 
 (defn github-url [endpoint]
   (str "https://api.github.com" endpoint))
@@ -251,6 +252,11 @@
 (defn tree-sha-path [org repo tree-sha]
   (str (trees-path org repo) "/" tree-sha))
 
+(defn create-tree-request [org repo body]
+  (->
+   (mock/request :post (trees-path org repo))
+   (assoc :body body)))
+
 (defn create-tree [org repo body]
   (request {:path (trees-path org repo)
             :method :post
@@ -262,14 +268,11 @@
 (defspec create-tree-adds-tree-to-repo
   10
   (prop/for-all
-   [org-name object-name-gen
-    repo (repo-gen)
+   [{:keys [handler database my-org my-repo]} (mock-gen/database-gen {:org [[:my-org]]
+                                                                      :repo [[:my-repo {:refs {:repo/org :my-org}}]]})
     tree github-tree-gen]
-   (with-handler {:orgs [{:name org-name
-                          :repos [repo]}]}
-     (let [{{:keys [sha]} :body} (create-tree org-name (:name repo) {:tree tree})]
-       (= 200
-          (:status (get-tree org-name (:name repo) sha)))))))
+   (let [{{:keys [sha]} :body} (handler (create-tree-request (:org/name my-org) (:repo/name my-repo) {:tree tree}))]
+     (-> my-repo :repo/jgit (jgit/get-tree sha)))))
 
 (def get-tree-response-schema
   [:map
