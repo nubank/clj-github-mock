@@ -10,7 +10,8 @@
             [clojure.test.check.random :as random]
             [clj-github-mock.handlers.repos :as repos]
             [clojure.walk :as walk]
-            [lambdaisland.regal.generator :as regal-gen]))
+            [lambdaisland.regal.generator :as regal-gen]
+            [malli.util :as mu]))
 
 (defn unique-name-gen []
   (let [names (atom #{})]
@@ -57,6 +58,16 @@
              #(gen/map ref-name % {:min-elements 1})
              blob)))
 
+(defn commit
+  ([]
+   (commit nil))
+  ([tree-sha]
+   (let [base-schema [:map
+                      [:message :string]]]
+     (mg/generator (if tree-sha
+                     (mu/assoc base-schema :tree [:= tree-sha])
+                     base-schema)))))
+
 (defn schema []
   {:org {:prefix :org
          :datastore :datascript
@@ -74,8 +85,14 @@
    :tree {:prefix :tree
           :datastore :jgit
           :malli-schema [:map
+                         [:tree/id :uuid]
                          [:tree [:any {:gen/gen github-tree}]]]
-          :relations {:tree/repo [:repo :repo/id]}}})
+          :relations {:tree/repo [:repo :repo/id]}}
+   :commit {:prefix :commit
+            :datastore :jgit
+            :malli-schema [:map
+                           [:commit [:any {:gen/gen (commit)}]]]
+            :relations {:commit/tree [:tree :tree/id]}}})
 
 (defn malli-create-gen
   [ent-db]
@@ -117,10 +134,19 @@
 (defn datastore [{:keys [schema]} {:keys [ent-type]}]
   (:datastore (ent-type schema)))
 
-(defn insert-jgit [database ent-db {:keys [ent-type spec-gen]}]
-  (let [repo (:repo/jgit (database/lookup database [:repo/id (:tree/repo #tap spec-gen)]))]
-    (merge spec-gen
-           (jgit/create-tree! repo spec-gen))))
+(defn insert-jgit [database {:keys [trees]} {:keys [ent-type spec-gen]}]
+  (case ent-type
+    :tree
+    (let [repo (:repo/jgit (database/lookup database [:repo/id (:tree/repo spec-gen)]))
+          tree (merge spec-gen
+                      (jgit/create-tree! repo spec-gen))]
+      (swap! trees assoc (:tree/id spec-gen) tree)
+      tree)
+    :commit
+    (let [tree (get @trees (:commit/tree spec-gen))
+          repo (:repo/jgit (database/lookup database [:repo/id (:tree/repo tree)]))]
+      (merge spec-gen
+             (jgit/create-commit! repo (assoc (:commit spec-gen) :tree (:sha tree)))))))
 
 (defn insert-datascript [database ent-db {:keys [spec-gen] :as ent-attrs}]
   (let [datoms (assoc-ent-at-foreign-keys ent-db ent-attrs)]
@@ -146,13 +172,14 @@
             (map #(map (partial ent-data ent-db) %)
                  (vals ents-by-type)))))
 
-(defn database-gen [query]
+(defn database [query]
   (gen/->Generator
    (fn [rnd size]
      (let [database (database/create {})
            ent-db (-> (ent-db-malli-gen {:schema (schema)
                                          :gen-options {:rnd-state (atom rnd)
-                                                       :size size}}
+                                                       :size size}
+                                         :trees (atom {})}
                                        query)
                      (sm/visit-ents-once :inserted-data (partial insert database)))]
        (rose/pure
