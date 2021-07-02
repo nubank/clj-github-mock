@@ -18,7 +18,8 @@
             [matcher-combinators.test]
             [clj-github-mock.generators :as mock-gen]
             [ring.mock.request :as mock]
-            [clj-github-mock.impl.jgit :as jgit]))
+            [clj-github-mock.impl.jgit :as jgit]
+            [clj-github-mock.impl.database :as database]))
 
 (defn github-url [endpoint]
   (str "https://api.github.com" endpoint))
@@ -122,36 +123,33 @@
             :method :post
             :body body}))
 
+(defn create-org-repo-request [org body]
+  (-> (mock/request :post (org-repos-path org))
+      (assoc :body body)))
+
 (defspec create-org-repo-respects-response-schema
   10
   (prop/for-all
-   [org-name object-name-gen
-    repo-name object-name-gen]
+   [{:keys [handler org0]} (mock-gen/database {:org [[1]]})
+    repo-name mock-gen/ref-name]
    (m/validate
     create-org-repo-response-schema
-    (with-handler {:orgs [{:name org-name}]}
-      (create-org-repo org-name {:name repo-name})))))
+    (handler (create-org-repo-request (:org/name org0) {:name repo-name})))))
 
 (defspec create-org-repo-requires-a-name
   10
   (prop/for-all
-   [org-name object-name-gen]
+   [{:keys [handler org0]} (mock-gen/database {:org [[1]]})]
    (match? {:status 422}
-           (with-handler {:orgs [{:name org-name}]}
-             (create-org-repo org-name {})))))
+           (handler (create-org-repo-request (:org/name org0) {})))))
 
 (defspec create-org-repo-adds-repo-to-the-org
   10
   (prop/for-all
-   [[org repo-name] (gen/let [org (org-gen)
-                              repo-name (gen/such-that #(not ((->> org :repos (map :name) set) %)) object-name-gen)]
-                      [org repo-name])]
-   (with-handler {:orgs [org]}
-     (let [repos-before (set (:body (list-org-repos (:name org))))
-           _ (create-org-repo (:name org) {:name repo-name})
-           repos-after (set (:body (list-org-repos (:name org))))]
-       (match? #{{:full_name (string/join "/" [(:name org) repo-name])}}
-               (set/difference repos-after repos-before))))))
+   [{:keys [handler database org0]} (mock-gen/database {:org [[1]]})
+    repo-name mock-gen/ref-name]
+   (handler (create-org-repo-request (:org/name org0) {:name repo-name}))
+   (database/find-repo database (:org/name org0) repo-name)))
 
 (def get-org-repo-response-schema
   [:map
@@ -167,45 +165,43 @@
 (defn get-org-repo [org-name repo-name]
   (request {:path (org-repo-path org-name repo-name)}))
 
+(defn get-org-repo-request [org-name repo-name]
+  (mock/request :get (org-repo-path org-name repo-name)))
+
 (defspec get-org-repo-respects-response-schema
   10
   (prop/for-all
-   [org-name object-name-gen
-    repo (repo-gen)]
+   [{:keys [handler org0 repo0]} (mock-gen/database {:repo [[1]]})]
    (m/validate
     get-org-repo-response-schema
-    (with-handler {:orgs [{:name org-name
-                           :repos [repo]}]}
-      (get-org-repo org-name (:name repo))))))
+    (handler (get-org-repo-request (:org/name org0) (:repo/name repo0))))))
 
 (defn update-org-repo [org-name repo-name body]
   (request {:path (org-repo-path org-name repo-name)
             :method :patch
             :body body}))
 
+(defn update-org-repo-request [org-name repo-name body]
+  (-> (mock/request :patch (org-repo-path org-name repo-name))
+      (assoc :body body)))
+
 (defspec update-org-repo-respects-response-schema
   10
   (prop/for-all
-   [org-name object-name-gen
-    repo (repo-gen)]
+   [{:keys [handler org0 repo0]} (mock-gen/database {:repo [[1]]})]
    (m/validate
     get-org-repo-response-schema
-    (with-handler {:orgs [{:name org-name
-                           :repos [repo]}]}
-      (update-org-repo org-name (:name repo) {:random-attr "random-value"})))))
+    (handler (update-org-repo-request (:org/name org0) (:repo/name repo0) {:random-attr "random-value"})))))
 
 (defspec update-org-repo-only-updates-set-fields
   10
   (prop/for-all
-   [org-name object-name-gen
-    repo (repo-gen)]
-   (with-handler {:orgs [{:name org-name
-                          :repos [repo]}]}
-     (let [repo-before (:body (get-org-repo org-name (:name repo)))
-           _ (update-org-repo org-name (:name repo) {:visibility "private"})
-           repo-after (:body (get-org-repo org-name (:name repo)))]
+   [{:keys [handler org0 repo0]} (mock-gen/database {:repo [[1]]})]
+   (let [repo-before (:body (handler (get-org-repo-request (:org/name org0) (:repo/name repo0))))
+         _ (handler (update-org-repo-request (:org/name org0) (:repo/name repo0) {:visibility "private"}))
+         repo-after (:body (handler (get-org-repo-request (:org/name org0) (:repo/name repo0))))]
        (match? [nil {:visibility "private"} any?]
-               (data/diff repo-before repo-after))))))
+               (data/diff repo-before repo-after)))))
 
 (defn trees-path [org repo]
   (str "/repos/" org "/" repo "/git/trees"))
