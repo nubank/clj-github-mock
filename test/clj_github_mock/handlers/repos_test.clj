@@ -313,6 +313,10 @@
             :method :post
             :body body}))
 
+(defn create-ref-request [org repo body]
+  (-> (mock/request :post (refs-path org repo))
+      (assoc :body body)))
+
 (defn get-ref [org repo ref]
   (request {:path (ref-path org repo ref)}))
 
@@ -321,26 +325,25 @@
             :method :patch
             :body body}))
 
+(defn update-ref-request [org repo ref body]
+  (-> (mock/request :patch (refs-ref-path org repo ref))
+      (assoc :body body)))
+
 (defn delete-ref [org repo ref]
   (request {:path (refs-ref-path org repo ref)
             :method :delete}))
 
+(defn delete-ref-request [org repo ref]
+  (mock/request :delete (refs-ref-path org repo ref)))
+
 (defspec create-ref-adds-ref-to-repo
   10
   (prop/for-all
-   [org-name object-name-gen
-    repo (repo-gen)
-    tree mock-gen/github-tree
-    ref (gen/not-empty gen/string-alphanumeric)]
-   (with-handler {:orgs [{:name org-name
-                          :repos [repo]}]}
-     (let [{{tree-sha :sha} :body} (create-tree org-name (:name repo) {:tree tree})
-           {{:keys [sha]} :body} (create-commit org-name (:name repo) {:message "some message"
-                                                                       :tree tree-sha})]
-       (create-ref org-name (:name repo) {:ref (str "refs/heads/" ref)
-                                          :sha sha})
-       (= 200
-          (:status (get-ref org-name (:name repo) (str "heads/" ref))))))))
+   [{:keys [handler org0 repo0 commit0]} (mock-gen/database {:commit [[1]]})
+    ref (gen/fmap #(str "refs/heads/" %) mock-gen/ref-name)]
+   (handler (create-ref-request (:org/name org0) (:repo/name repo0) {:ref ref
+                                                                          :sha (:sha commit0)}))
+   (-> repo0 :repo/jgit (jgit/get-reference ref))))
 
 (defspec update-ref-updates-the-ref
   10

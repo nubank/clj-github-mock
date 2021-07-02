@@ -91,8 +91,15 @@
    :commit {:prefix :commit
             :datastore :jgit
             :malli-schema [:map
+                           [:commit/id :uuid]
                            [:commit [:any {:gen/gen (commit)}]]]
-            :relations {:commit/tree [:tree :tree/id]}}})
+            :relations {:commit/tree [:tree :tree/id]}
+            :constraints {:commit/tree #{:uniq}}}
+   :branch {:prefix :branch
+            :datastore :jgit
+            :malli-schema [:map
+                           [:ref [:string {:gen/gen (gen/fmap #(str "refs/heads/" %) (unique-name))}]]]
+            :relations {:branch/commit [:commit :commit/id]}}})
 
 (defn malli-create-gen
   [ent-db]
@@ -134,7 +141,7 @@
 (defn datastore [{:keys [schema]} {:keys [ent-type]}]
   (:datastore (ent-type schema)))
 
-(defn insert-jgit [database {:keys [trees]} {:keys [ent-type spec-gen]}]
+(defn insert-jgit [database {:keys [trees commits]} {:keys [ent-type spec-gen]}]
   (case ent-type
     :tree
     (let [repo (:repo/jgit (database/lookup database [:repo/id (:tree/repo spec-gen)]))
@@ -144,9 +151,17 @@
       tree)
     :commit
     (let [tree (get @trees (:commit/tree spec-gen))
+          repo (:repo/jgit (database/lookup database [:repo/id (:tree/repo tree)]))
+          commit (merge spec-gen
+                        (jgit/create-commit! repo (assoc (:commit spec-gen) :tree (:sha tree))))]
+      (swap! commits assoc (:commit/id spec-gen) commit)
+      commit)
+    :branch
+    (let [commit (get @commits (:branch/commit spec-gen))
+          tree (get @trees (:commit/tree commit))
           repo (:repo/jgit (database/lookup database [:repo/id (:tree/repo tree)]))]
       (merge spec-gen
-             (jgit/create-commit! repo (assoc (:commit spec-gen) :tree (:sha tree)))))))
+             (jgit/create-reference! repo (assoc spec-gen :sha (:sha commit)))))))
 
 (defn insert-datascript [database ent-db {:keys [spec-gen] :as ent-attrs}]
   (let [datoms (assoc-ent-at-foreign-keys ent-db ent-attrs)]
@@ -179,7 +194,8 @@
            ent-db (-> (ent-db-malli-gen {:schema (schema)
                                          :gen-options {:rnd-state (atom rnd)
                                                        :size size}
-                                         :trees (atom {})}
+                                         :trees (atom {})
+                                         :commits (atom {})}
                                        query)
                      (sm/visit-ents-once :inserted-data (partial insert database)))]
        (rose/pure
