@@ -108,14 +108,19 @@
       (commit-history repo next-commit (dec num-commits)))))
 
 (defn branch
-  ([repo]
-   (branch repo nil))
-  ([repo base-branch]
+  ([repo branch-name]
+   (branch repo nil branch-name))
+  ([repo base-branch branch-name]
    (gen/let [num-commits (gen/fmap inc (gen/scale #(/ % 10) gen/nat))
-             last-commit (commit-history repo (when base-branch (-> (jgit/get-branch repo base-branch) :commit :sha)) num-commits)
-             branch-name ref-name]
+             last-commit (commit-history repo (when base-branch (-> (jgit/get-branch repo base-branch) :commit :sha)) num-commits)]
      (jgit/create-reference! repo {:ref (str "refs/heads/" branch-name) :sha (:sha last-commit)})
      (jgit/get-branch repo branch-name))))
+
+(defn random-file [repo branch-name]
+  (let [branch (jgit/get-branch repo branch-name)
+        commit (jgit/get-commit repo (-> branch :commit :sha))
+        {:keys [tree]} (jgit/get-flatten-tree repo (-> commit :tree :sha))]
+    (gen/elements tree)))
 
 (defn schema []
   {:org {:prefix :org

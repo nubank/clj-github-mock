@@ -355,7 +355,7 @@
   10
   (prop/for-all
    [{:keys [handler org0 repo0 branch commit]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
-                                                  branch (mock-gen/branch (:repo/jgit repo0))
+                                                  branch (mock-gen/branch (:repo/jgit repo0) "main")
                                                   commit (mock-gen/commit (:repo/jgit repo0) (-> branch :commit :sha))]
                                           (assoc database :branch branch :commit commit))]
    (handler (update-ref-request (:org/name org0) (:repo/name repo0) (str "heads/" (:name branch)) {:sha (:sha commit)}))
@@ -364,20 +364,11 @@
 (defspec delete-ref-removes-ref-from-repo
   10
   (prop/for-all
-   [org-name object-name-gen
-    repo (repo-gen)
-    tree mock-gen/github-tree
-    ref (gen/not-empty gen/string-alphanumeric)]
-   (with-handler {:orgs [{:name org-name
-                          :repos [repo]}]}
-     (let [{{tree-sha :sha} :body} (create-tree org-name (:name repo) {:tree tree})
-           {{:keys [sha]} :body} (create-commit org-name (:name repo) {:message "some message"
-                                                                       :tree tree-sha})]
-       (create-ref org-name (:name repo) {:ref (str "refs/heads/" ref)
-                                          :sha sha})
-       (delete-ref org-name (:name repo) (str "heads/" ref))
-       (= 404
-          (:status (get-ref org-name (:name repo) (str "heads/" ref))))))))
+   [{:keys [handler org0 repo0 branch]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
+                                                  branch (mock-gen/branch (:repo/jgit repo0) "main")]
+                                          (assoc database :branch branch))]
+   (handler (delete-ref-request (:org/name org0) (:repo/name repo0) (str "heads/" (:name branch))))
+   (nil? (-> repo0 :repo/jgit (jgit/get-reference (str "refs/heads/" (:name branch)))))))
 
 (defn branch-path [org repo branch]
   (str "/repos/" org "/" repo "/branches/" branch))
@@ -385,26 +376,19 @@
 (defn get-branch [org repo branch]
   (request {:path (branch-path org repo branch)}))
 
+(defn get-branch-request [org repo branch]
+  (mock/request :get (branch-path org repo branch)))
+
 (defspec get-branch-returns-branch-info
   10
   (prop/for-all
-   [org-name object-name-gen
-    repo (repo-gen)
-    tree mock-gen/github-tree
-    ref (gen/not-empty gen/string-alphanumeric)]
-   (with-handler {:orgs [{:name org-name
-                          :repos [repo]}]}
-     (let [{{tree-sha :sha} :body} (create-tree org-name (:name repo) {:tree tree})
-           {{:keys [sha]} :body} (create-commit org-name (:name repo) {:message "some message"
-                                                                       :tree tree-sha})]
-       (create-ref org-name (:name repo) {:ref (str "refs/heads/" ref)
-                                          :sha sha})
-       (match? {:status 200
-                :body {:name ref
-                       :commit {:sha sha
-                                :commit {:message "some message"
-                                         :tree {:sha tree-sha}}}}}
-               (get-branch org-name (:name repo) ref))))))
+   [{:keys [handler org0 repo0 branch]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
+                                                  branch-name mock-gen/ref-name
+                                                  branch (mock-gen/branch (:repo/jgit repo0) branch-name)]
+                                          (assoc database :branch branch))]
+   (= {:status 200
+       :body branch}
+      (handler (get-branch-request (:org/name org0) (:repo/name repo0) (:name branch))))))
 
 (defn contents-path [org repo path]
   (str "/repos/" org "/" repo "/contents/" path))
@@ -412,6 +396,12 @@
 (defn get-content [org repo path ref]
   (request {:path (contents-path org repo path)
             :query-params {"ref" ref}}))
+
+(defn get-content-request
+  ([org repo path]
+   (mock/request :get (contents-path org repo path))) 
+  ([org repo path ref]
+   (mock/request :get (contents-path org repo path) {"ref" ref})))
 
 (def github-tree+file-gen
   (gen/let [tree mock-gen/github-tree
@@ -422,21 +412,15 @@
 (defspec get-content-returns-content
   10
   (prop/for-all
-   [org-name object-name-gen
-    repo (repo-gen)
-    {:keys [tree file]} github-tree+file-gen]
-   (with-handler {:orgs [{:name org-name
-                          :repos [repo]}]}
-     (let [{{tree-sha :sha} :body} (create-tree org-name (:name repo) {:tree tree})
-           {{:keys [sha]} :body} (create-commit org-name (:name repo) {:message "some message"
-                                                                       :tree tree-sha})]
-       (create-ref org-name (:name repo) {:ref "refs/heads/main"
-                                          :sha sha})
-       (match? {:status 200
-                :body {:type "file"
-                       :path (:path file)
-                       :content (base64/encode (:content file) "UTF-8")}}
-               (get-content org-name (:name repo) (:path file) sha))))))
+   [{:keys [handler org0 repo0 branch file]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
+                                                branch (mock-gen/branch (:repo/jgit repo0) "main")
+                                                file (mock-gen/random-file (:repo/jgit repo0) "main")]
+                                        (assoc database :branch branch :file file))]
+   (= {:status 200
+       :body {:type "file"
+              :path (:path file)
+              :content (base64/encode (:content file) "UTF-8")}}
+      (handler (get-content-request (:org/name org0) (:repo/name repo0) (:path file) (-> branch :commit :sha))))))
 
 (defspec get-content-supports-refs
   10
@@ -457,22 +441,30 @@
                        :content (base64/encode (:content file) "UTF-8")}}
                (get-content org-name (:name repo) (:path file) "main"))))))
 
+(defspec get-content-supports-refs
+  10
+  (prop/for-all
+   [{:keys [handler org0 repo0 file branch-name]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
+                                                            branch-name mock-gen/ref-name
+                                                            _ (mock-gen/branch (:repo/jgit repo0) branch-name)
+                                                            file (mock-gen/random-file (:repo/jgit repo0) branch-name)]
+                                                    (assoc database :branch-name branch-name :file file))]
+   (= {:status 200
+       :body {:type "file"
+              :path (:path file)
+              :content (base64/encode (:content file) "UTF-8")}}
+      (handler (get-content-request (:org/name org0) (:repo/name repo0) (:path file) branch-name)))))
+
 (defspec get-content-supports-default-branch
   10
   (prop/for-all
-   [org-name object-name-gen
-    repo (gen/fmap #(assoc % :default_branch "some-default-branch") (repo-gen))
-    {:keys [tree file]} github-tree+file-gen]
-   (with-handler {:orgs [{:name org-name
-                          :repos [repo]}]}
-     (let [{{tree-sha :sha} :body} (create-tree org-name (:name repo) {:tree tree})
-           {{:keys [sha]} :body} (create-commit org-name (:name repo) {:message "some message"
-                                                                       :tree tree-sha})]
-       (create-ref org-name (:name repo) {:ref "refs/heads/some-default-branch"
-                                          :sha sha})
-       (match? {:status 200
-                :body {:type "file"
-                       :path (:path file)
-                       :content (base64/encode (:content file) "UTF-8")}}
-               (request {:path (contents-path org-name (:name repo) (:path file))}))))))
-
+   [{:keys [handler org0 repo0 file]} (gen/let [branch-name mock-gen/ref-name
+                                                {:keys [repo0] :as database} (mock-gen/database {:repo [[1 {:spec-gen {:repo/attrs {:default_branch branch-name}}}]]})
+                                                branch (mock-gen/branch (:repo/jgit repo0) branch-name)
+                                                file (mock-gen/random-file (:repo/jgit repo0) branch-name)]
+                                        (assoc database :file file))]
+   (= {:status 200
+       :body {:type "file"
+              :path (:path file)
+              :content (base64/encode (:content file) "UTF-8")}}
+      (handler (get-content-request (:org/name org0) (:repo/name repo0) (:path file))))))
