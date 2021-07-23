@@ -33,7 +33,8 @@
                                   [metosin/malli "0.4.0"]
                                   [lambdaisland/regal "0.0.97"]
                                   [juji/editscript "0.5.7"]
-                                  [reifyhealth/specmonstah "2.0.0"]]}}
+                                  [reifyhealth/specmonstah "2.0.0"]
+                                  [medley "1.3.0"]]}}
 
   :aliases {"coverage" ["cloverage" "-s" "coverage"]
             "lint"     ["do" ["cljfmt" "check"] ["nsorg"]]

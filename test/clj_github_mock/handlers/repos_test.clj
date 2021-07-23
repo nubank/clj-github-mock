@@ -275,10 +275,11 @@
   10
   (prop/for-all
    [{:keys [handler org0 repo0 tree0]} (mock-gen/database {:tree [[1]]})
-    commit (mock-gen/commit)]
+    message gen/string]
    (let [{{:keys [sha]} :body} (handler (create-commit-request (:org/name org0)
                                                                (:repo/name repo0)
-                                                               (assoc commit :tree (:sha tree0))))]
+                                                               {:message message
+                                                                :tree (:sha tree0)}))]
      (-> repo0 :repo/jgit (jgit/get-commit sha)))))
 
 (def get-commit-response-schema

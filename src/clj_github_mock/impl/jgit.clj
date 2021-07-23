@@ -134,6 +134,24 @@
   {:sha sha
    :tree (into [] (tree-walk-seq (tree-walk repo sha)))})
 
+(defn- concat-path [base-path path]
+  (if base-path (str base-path "/" path) path))
+
+(defn- flatten-tree [repo base-sha base-path]
+  (let [{:keys [tree]} (get-tree repo base-sha)]
+    (mapcat (fn [{:keys [path type sha] :as tree-item}]
+              (if (= "tree" type)
+                (flatten-tree repo sha (concat-path base-path path))
+                [(-> (merge tree-item (get-blob repo (:sha tree-item)))
+                     (update :content #(if (string/blank? %) % (base64/decode %)))
+                     (update :path (partial concat-path base-path))
+                     (dissoc :sha))]))
+            tree)))
+
+(defn get-flatten-tree [repo sha]
+  {:sha sha
+   :tree (into [] (flatten-tree repo sha nil))})
+
 (defn create-tree! [repo {:keys [tree base_tree]}]
   (let [final-tree (-> (tree-items->tree-map tree)
                        (tree-map->tree-items repo base_tree))]

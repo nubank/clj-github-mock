@@ -11,7 +11,7 @@
             [clj-github-mock.handlers.repos :as repos]
             [clojure.walk :as walk]
             [lambdaisland.regal.generator :as regal-gen]
-            [malli.util :as mu]))
+            [medley.core :refer [assoc-some]]))
 
 (defn unique-name []
   (let [names (atom #{})]
@@ -58,15 +58,55 @@
              #(gen/map ref-name % {:min-elements 1})
              blob)))
 
+(def github-commit (mg/generator [:map
+                                  [:message :string]]))
+
+(defn update-gen [tree]
+  (gen/let [item (gen/elements tree)
+            new-content (gen/not-empty gen/string)]
+    (assoc item :content new-content)))
+
+(defn delete-gen [tree]
+  (gen/let [item (gen/elements tree)]
+    (-> item
+        (dissoc :content)
+        (assoc :sha nil))))
+
+(defn changes [github-tree]
+  (gen/vector-distinct-by :path (gen/one-of [(update-gen github-tree) (delete-gen github-tree)]) {:min-elements 1}))
+
+(defn github-tree-changes [base-github-tree]
+  (if base-github-tree
+    (changes base-github-tree)
+    github-tree))
+
 (defn commit
-  ([]
-   (commit nil))
-  ([tree-sha]
-   (let [base-schema [:map
-                      [:message :string]]]
-     (mg/generator (if tree-sha
-                     (mu/assoc base-schema :tree [:= tree-sha])
-                     base-schema)))))
+  ([repo]
+   (commit repo nil))
+  ([repo parent-commit-sha]
+   (let [base-tree (when parent-commit-sha
+                     (as-> (jgit/get-commit repo parent-commit-sha) $
+                       (jgit/get-flatten-tree repo (-> $ :tree :sha))))]
+     (gen/let [tree (github-tree-changes (:tree base-tree))
+               gc github-commit]
+       (as-> (jgit/create-tree! repo (assoc-some {:tree tree} :base_tree (:sha base-tree))) $
+         (jgit/create-commit! repo (assoc-some gc :tree (:sha $) :parents (when parent-commit-sha [parent-commit-sha]))))))))
+
+(defn- commit-history [repo base-commit num-commits]
+  (if (= 0 num-commits)
+    (gen/return base-commit)
+    (gen/let [next-commit (commit repo (:sha base-commit))]
+      (commit-history repo next-commit (dec num-commits)))))
+
+(defn branch
+  ([repo]
+   (branch repo nil))
+  ([repo base-branch]
+   (gen/let [num-commits (gen/fmap inc (gen/scale #(/ % 10) gen/nat))
+             last-commit (commit-history repo (when base-branch (-> (jgit/get-branch repo base-branch) :commit :sha)) num-commits)
+             branch-name ref-name]
+     (jgit/create-reference! repo {:ref (str "refs/heads/" branch-name) :sha (:sha last-commit)})
+     (jgit/get-branch repo branch-name))))
 
 (defn schema []
   {:org {:prefix :org
@@ -92,9 +132,9 @@
             :datastore :jgit
             :malli-schema [:map
                            [:commit/id :uuid]
-                           [:commit [:any {:gen/gen (commit)}]]]
+                           [:commit [:any {:gen/gen github-commit}]]]
             :relations {:commit/tree [:tree :tree/id]}
-            :constraints {:commit/tree #{:uniq}}}
+                :constraints {:commit/tree #{:uniq}}}
    :branch {:prefix :branch
             :datastore :jgit
             :malli-schema [:map
