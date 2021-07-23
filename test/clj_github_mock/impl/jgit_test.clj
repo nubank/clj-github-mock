@@ -23,7 +23,6 @@
         (decode-base64 (:content (sut/get-blob repo sha)))))))
 
 (defspec tree-is-added-to-repo
-  10
   (prop/for-all
    [tree mock-gen/github-tree]
    (let [repo (sut/empty-repo)
@@ -56,7 +55,6 @@
        (editscript/edits->script)))
 
 (defspec create-tree-preserves-base-tree
-  10
   (prop/for-all
    [{:keys [tree changes]} github-tree+changes-gen]
    (let [repo (sut/empty-repo)
@@ -68,7 +66,6 @@
         (editscript/patch content-before (changes->edits changes))))))
 
 (defspec commit-is-added-to-repo
-  10
   (prop/for-all
    [tree mock-gen/github-tree
     message gen/string]
@@ -80,7 +77,6 @@
              (sut/get-commit repo sha)))))
 
 (defspec create-commit-sets-parent
-  10
   (prop/for-all
    [{:keys [tree changes]} github-tree+changes-gen
     message gen/string]
@@ -130,7 +126,6 @@
         (sut/get-branch repo branch)))))
 
 (defspec can-get-content
-  10
   (prop/for-all
    [tree mock-gen/github-tree]
    (let [repo (sut/empty-repo)
