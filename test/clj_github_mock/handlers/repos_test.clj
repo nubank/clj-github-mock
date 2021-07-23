@@ -359,7 +359,7 @@
                                                   commit (mock-gen/commit (:repo/jgit repo0) (-> branch :commit :sha))]
                                           (assoc database :branch branch :commit commit))]
    (handler (update-ref-request (:org/name org0) (:repo/name repo0) (str "heads/" (:name branch)) {:sha (:sha commit)}))
-   (= #tap (:sha commit) #tap (-> repo0 :repo/jgit (jgit/get-reference (str "refs/heads/" (:name branch))) :object :sha))))
+   (= (:sha commit) (-> repo0 :repo/jgit (jgit/get-reference (str "refs/heads/" (:name branch))) :object :sha))))
 
 (defspec delete-ref-removes-ref-from-repo
   10
