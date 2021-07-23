@@ -1,75 +1,17 @@
 (ns clj-github-mock.handlers.repos-test
   (:require [base64-clj.core :as base64]
-            [cheshire.core :as json]
-            [clj-github-mock.core :refer [ring-handler]]
-            [clj-http.client :as http]
-            [clj-http.fake :refer [with-fake-routes]]
             [clojure.data :as data]
             [clojure.string :as string]
             [clojure.test.check.clojure-test :refer [defspec]]
             [clojure.test.check.generators :as gen]
             [clojure.test.check.properties :as prop]
-            [lambdaisland.regal.generator :as rg]
             [malli.core :as m]
-            [malli.generator :as mg]
             [matcher-combinators.standalone :refer [match?]]
             [matcher-combinators.test]
             [clj-github-mock.generators :as mock-gen]
             [ring.mock.request :as mock]
             [clj-github-mock.impl.jgit :as jgit]
             [clj-github-mock.impl.database :as database]))
-
-(defn github-url [endpoint]
-  (str "https://api.github.com" endpoint))
-
-(defmacro with-handler [initial-state & body]
-  `(with-fake-routes {#"https://api.github.com/.*" (ring-handler {:initial-state ~initial-state})}
-     ~@body))
-
-(defn deep-merge [a & maps]
-  (if (map? a)
-    (apply merge-with deep-merge a maps)
-    (apply merge-with deep-merge maps)))
-
-(defn request [base-request]
-  (http/request (deep-merge {:method :get
-                             :headers {"Content-Type" "application/json"}
-                             :as :json
-                             :throw-exceptions false}
-                            (-> base-request
-                                (assoc :url (github-url (:path base-request)))
-                                (update :body json/encode)
-                                (dissoc :path)))))
-
-(def object-name [:re {:gen/gen (rg/gen [:+ [:class [\a \z]]])} #"\w+"])
-
-(def object-name-gen (mg/generator object-name))
-
-(defn repo-gen
-  ([]
-   (repo-gen object-name-gen))
-  ([repo-name-gen]
-   (mg/generator [:map
-                  [:name [:string {:gen/gen repo-name-gen}]]])))
-
-(def repos-gen
-  (gen/let [repos-names (mg/generator [:set {:min 1 :max 5} object-name])]
-    (apply gen/tuple
-           (map #(repo-gen (gen/return %)) repos-names))))
-
-(defn org-gen
-  ([]
-   (org-gen object-name-gen))
-  ([org-name-gen]
-   (gen/let [org-name org-name-gen]
-     (mg/generator [:map
-                    [:name [:string {:gen/gen (gen/return org-name)}]]
-                    [:repos [:vector {:gen/gen repos-gen} :any]]]))))
-
-(def orgs-gen
-  (gen/let [org-names (mg/generator [:set {:min 1 :max 5} object-name])]
-    (apply gen/tuple
-           (map #(org-gen (gen/return %)) org-names))))
 
 (defn org-repos-path [org-name]
   (str "/orgs/" org-name "/repos"))
@@ -82,9 +24,6 @@
             [:name :string]
             [:full_name :string]
             [:default_branch :string]]]]])
-
-(defn list-org-repos [org-name]
-  (request {:path (org-repos-path org-name)}))
 
 (defn list-org-repos-request [org-name]
   (mock/request :get (org-repos-path org-name)))
@@ -115,11 +54,6 @@
            [:name :string]
            [:full_name :string]
            [:default_branch :string]]]])
-
-(defn create-org-repo [org body]
-  (request {:path (org-repos-path org)
-            :method :post
-            :body body}))
 
 (defn create-org-repo-request [org body]
   (-> (mock/request :post (org-repos-path org))
@@ -160,9 +94,6 @@
 (defn org-repo-path [org-name repo-name]
   (string/join "/" ["/repos" org-name repo-name]))
 
-(defn get-org-repo [org-name repo-name]
-  (request {:path (org-repo-path org-name repo-name)}))
-
 (defn get-org-repo-request [org-name repo-name]
   (mock/request :get (org-repo-path org-name repo-name)))
 
@@ -173,11 +104,6 @@
    (m/validate
     get-org-repo-response-schema
     (handler (get-org-repo-request (:org/name org0) (:repo/name repo0))))))
-
-(defn update-org-repo [org-name repo-name body]
-  (request {:path (org-repo-path org-name repo-name)
-            :method :patch
-            :body body}))
 
 (defn update-org-repo-request [org-name repo-name body]
   (-> (mock/request :patch (org-repo-path org-name repo-name))
@@ -211,14 +137,6 @@
   (->
    (mock/request :post (trees-path org repo))
    (assoc :body body)))
-
-(defn create-tree [org repo body]
-  (request {:path (trees-path org repo)
-            :method :post
-            :body body}))
-
-(defn get-tree [org repo tree-sha]
-  (request {:path (tree-sha-path org repo tree-sha)}))
 
 (defn get-tree-request [org repo tree-sha]
   (mock/request :get (tree-sha-path org repo tree-sha)))
@@ -258,17 +176,9 @@
 (defn commit-sha-path [org repo sha]
   (str (commits-path org repo) "/" sha))
 
-(defn create-commit [org repo body]
-  (request {:path (commits-path org repo)
-            :method :post
-            :body body}))
-
 (defn create-commit-request [org repo body]
   (-> (mock/request :post (commits-path org repo))
       (assoc :body body)))
-
-(defn get-commit [org repo sha]
-  (request {:path (commit-sha-path org repo sha)}))
 
 (defn get-commit-request [org repo sha]
   (mock/request :get (commit-sha-path org repo sha)))
@@ -312,30 +222,13 @@
 (defn refs-ref-path [org repo ref]
   (str (refs-path org repo) "/" ref))
 
-(defn create-ref [org repo body]
-  (request {:path (refs-path org repo)
-            :method :post
-            :body body}))
-
 (defn create-ref-request [org repo body]
   (-> (mock/request :post (refs-path org repo))
       (assoc :body body)))
 
-(defn get-ref [org repo ref]
-  (request {:path (ref-path org repo ref)}))
-
-(defn update-ref [org repo ref body]
-  (request {:path (refs-ref-path org repo ref)
-            :method :patch
-            :body body}))
-
 (defn update-ref-request [org repo ref body]
   (-> (mock/request :patch (refs-ref-path org repo ref))
       (assoc :body body)))
-
-(defn delete-ref [org repo ref]
-  (request {:path (refs-ref-path org repo ref)
-            :method :delete}))
 
 (defn delete-ref-request [org repo ref]
   (mock/request :delete (refs-ref-path org repo ref)))
@@ -373,9 +266,6 @@
 (defn branch-path [org repo branch]
   (str "/repos/" org "/" repo "/branches/" branch))
 
-(defn get-branch [org repo branch]
-  (request {:path (branch-path org repo branch)}))
-
 (defn get-branch-request [org repo branch]
   (mock/request :get (branch-path org repo branch)))
 
@@ -393,21 +283,11 @@
 (defn contents-path [org repo path]
   (str "/repos/" org "/" repo "/contents/" path))
 
-(defn get-content [org repo path ref]
-  (request {:path (contents-path org repo path)
-            :query-params {"ref" ref}}))
-
 (defn get-content-request
   ([org repo path]
    (mock/request :get (contents-path org repo path))) 
   ([org repo path ref]
    (mock/request :get (contents-path org repo path) {"ref" ref})))
-
-(def github-tree+file-gen
-  (gen/let [tree mock-gen/github-tree
-            file (gen/elements tree)]
-    {:tree tree
-     :file file}))
 
 (defspec get-content-returns-content
   10
@@ -421,25 +301,6 @@
               :path (:path file)
               :content (base64/encode (:content file) "UTF-8")}}
       (handler (get-content-request (:org/name org0) (:repo/name repo0) (:path file) (-> branch :commit :sha))))))
-
-(defspec get-content-supports-refs
-  10
-  (prop/for-all
-   [org-name object-name-gen
-    repo (repo-gen)
-    {:keys [tree file]} github-tree+file-gen]
-   (with-handler {:orgs [{:name org-name
-                          :repos [repo]}]}
-     (let [{{tree-sha :sha} :body} (create-tree org-name (:name repo) {:tree tree})
-           {{:keys [sha]} :body} (create-commit org-name (:name repo) {:message "some message"
-                                                                       :tree tree-sha})]
-       (create-ref org-name (:name repo) {:ref "refs/heads/main"
-                                          :sha sha})
-       (match? {:status 200
-                :body {:type "file"
-                       :path (:path file)
-                       :content (base64/encode (:content file) "UTF-8")}}
-               (get-content org-name (:name repo) (:path file) "main"))))))
 
 (defspec get-content-supports-refs
   10
