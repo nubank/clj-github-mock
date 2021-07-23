@@ -76,7 +76,7 @@
 (defn changes [base-github-tree]
   (if (empty? base-github-tree)
     github-tree
-    (gen/vector-distinct-by :path (gen/one-of [(update-gen base-github-tree) (delete-gen base-github-tree)]) {:min-elements 1})))
+    (gen/vector-distinct-by :path (gen/frequency [[9 (update-gen base-github-tree)] [1 (delete-gen base-github-tree)]]) {:min-elements 1})))
 
 (defn github-tree-changes [base-github-tree]
   (if base-github-tree
@@ -108,13 +108,12 @@
       (commit-history repo next-commit (dec num-commits)))))
 
 (defn branch
-  ([repo branch-name]
-   (branch repo nil branch-name))
-  ([repo base-branch branch-name]
-   (gen/let [num-commits (gen/fmap inc (gen/scale #(/ % 10) gen/nat))
-             last-commit (commit-history repo (when base-branch (-> (jgit/get-branch repo base-branch) :commit :sha)) num-commits)]
-     (jgit/create-reference! repo {:ref (str "refs/heads/" branch-name) :sha (:sha last-commit)})
-     (jgit/get-branch repo branch-name))))
+  [repo & {:keys [name num-commits base-branch]}]
+  (gen/let [branch-name (if name (gen/return name) ref-name)
+            num-commits (if num-commits (gen/return num-commits) (gen/fmap inc (gen/scale #(/ % 10) gen/nat)))
+            last-commit (commit-history repo (when base-branch (-> (jgit/get-branch repo base-branch) :commit :sha)) num-commits)]
+    (jgit/create-reference! repo {:ref (str "refs/heads/" branch-name) :sha (:sha last-commit)})
+    (jgit/get-branch repo branch-name)))
 
 (defn random-file [repo branch-name]
   (let [branch (jgit/get-branch repo branch-name)

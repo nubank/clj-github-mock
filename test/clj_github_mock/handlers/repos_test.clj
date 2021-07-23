@@ -29,14 +29,12 @@
   (mock/request :get (org-repos-path org-name)))
 
 (defspec list-org-repos-respects-response-schema
-  10
   (prop/for-all
    [{:keys [handler ent-db org0]} (mock-gen/database {:repo [[3]]})]
    (m/validate list-org-repos-response-schema
                (handler (list-org-repos-request (:org/name org0))))))
 
 (defspec list-org-repos-return-all-repos
-  10
   (prop/for-all
    [{:keys [handler ent-db ents]} (mock-gen/database {:org [[:org1]
                                                                 [:org2]
@@ -60,7 +58,6 @@
       (assoc :body body)))
 
 (defspec create-org-repo-respects-response-schema
-  10
   (prop/for-all
    [{:keys [handler org0]} (mock-gen/database {:org [[1]]})
     repo-name mock-gen/ref-name]
@@ -69,14 +66,12 @@
     (handler (create-org-repo-request (:org/name org0) {:name repo-name})))))
 
 (defspec create-org-repo-requires-a-name
-  10
   (prop/for-all
    [{:keys [handler org0]} (mock-gen/database {:org [[1]]})]
    (match? {:status 422}
            (handler (create-org-repo-request (:org/name org0) {})))))
 
 (defspec create-org-repo-adds-repo-to-the-org
-  10
   (prop/for-all
    [{:keys [handler database org0]} (mock-gen/database {:org [[1]]})
     repo-name mock-gen/ref-name]
@@ -98,7 +93,6 @@
   (mock/request :get (org-repo-path org-name repo-name)))
 
 (defspec get-org-repo-respects-response-schema
-  10
   (prop/for-all
    [{:keys [handler org0 repo0]} (mock-gen/database {:repo [[1]]})]
    (m/validate
@@ -110,7 +104,6 @@
       (assoc :body body)))
 
 (defspec update-org-repo-respects-response-schema
-  10
   (prop/for-all
    [{:keys [handler org0 repo0]} (mock-gen/database {:repo [[1]]})]
    (m/validate
@@ -118,7 +111,6 @@
     (handler (update-org-repo-request (:org/name org0) (:repo/name repo0) {:random-attr "random-value"})))))
 
 (defspec update-org-repo-only-updates-set-fields
-  10
   (prop/for-all
    [{:keys [handler org0 repo0]} (mock-gen/database {:repo [[1]]})]
    (let [repo-before (:body (handler (get-org-repo-request (:org/name org0) (:repo/name repo0))))
@@ -142,7 +134,6 @@
   (mock/request :get (tree-sha-path org repo tree-sha)))
 
 (defspec create-tree-adds-tree-to-repo
-  10
   (prop/for-all
    [{:keys [handler database org0 repo0]} (mock-gen/database {:repo [[1]]})
     tree mock-gen/github-tree]
@@ -162,7 +153,6 @@
                     [:sha :string]]]]]]])
 
 (defspec get-tree-respects-response-schema
-  10
   (prop/for-all
    [{:keys [handler org0 repo0 tree]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
                                                 tree (mock-gen/tree (:repo/jgit repo0))]
@@ -184,7 +174,6 @@
   (mock/request :get (commit-sha-path org repo sha)))
 
 (defspec create-commit-adds-commit-to-repo
-  10
   (prop/for-all
    [{:keys [handler org0 repo0 tree]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
                                                 tree (mock-gen/tree (:repo/jgit repo0))]
@@ -205,7 +194,6 @@
            [:message :string]]]])
 
 (defspec get-commit-respects-response-schema
-  10
   (prop/for-all
    [{:keys [handler org0 repo0 commit]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
                                                    commit (mock-gen/commit (:repo/jgit repo0))]
@@ -234,7 +222,6 @@
   (mock/request :delete (refs-ref-path org repo ref)))
 
 (defspec create-ref-adds-ref-to-repo
-  10
   (prop/for-all
    [{:keys [handler org0 repo0 commit]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
                                                    commit (mock-gen/commit (:repo/jgit repo0))]
@@ -245,20 +232,18 @@
    (-> repo0 :repo/jgit (jgit/get-reference ref))))
 
 (defspec update-ref-updates-the-ref
-  10
   (prop/for-all
    [{:keys [handler org0 repo0 branch commit]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
-                                                  branch (mock-gen/branch (:repo/jgit repo0) "main")
+                                                  branch (mock-gen/branch (:repo/jgit repo0))
                                                   commit (mock-gen/commit (:repo/jgit repo0) (-> branch :commit :sha))]
                                           (assoc database :branch branch :commit commit))]
    (handler (update-ref-request (:org/name org0) (:repo/name repo0) (str "heads/" (:name branch)) {:sha (:sha commit)}))
    (= (:sha commit) (-> repo0 :repo/jgit (jgit/get-reference (str "refs/heads/" (:name branch))) :object :sha))))
 
 (defspec delete-ref-removes-ref-from-repo
-  10
   (prop/for-all
    [{:keys [handler org0 repo0 branch]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
-                                                  branch (mock-gen/branch (:repo/jgit repo0) "main")]
+                                                  branch (mock-gen/branch (:repo/jgit repo0))]
                                           (assoc database :branch branch))]
    (handler (delete-ref-request (:org/name org0) (:repo/name repo0) (str "heads/" (:name branch))))
    (nil? (-> repo0 :repo/jgit (jgit/get-reference (str "refs/heads/" (:name branch)))))))
@@ -270,11 +255,9 @@
   (mock/request :get (branch-path org repo branch)))
 
 (defspec get-branch-returns-branch-info
-  10
   (prop/for-all
    [{:keys [handler org0 repo0 branch]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
-                                                  branch-name mock-gen/ref-name
-                                                  branch (mock-gen/branch (:repo/jgit repo0) branch-name)]
+                                                  branch (mock-gen/branch (:repo/jgit repo0))]
                                           (assoc database :branch branch))]
    (= {:status 200
        :body branch}
@@ -290,12 +273,11 @@
    (mock/request :get (contents-path org repo path) {"ref" ref})))
 
 (defspec get-content-returns-content
-  10
   (prop/for-all
    [{:keys [handler org0 repo0 branch file]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
-                                                branch (mock-gen/branch (:repo/jgit repo0) "main")
-                                                file (mock-gen/random-file (:repo/jgit repo0) "main")]
-                                        (assoc database :branch branch :file file))]
+                                                       branch (mock-gen/branch (:repo/jgit repo0) :num-commits 1)
+                                                       file (mock-gen/random-file (:repo/jgit repo0) (:name branch))]
+                                               (assoc database :branch branch :file file))]
    (= {:status 200
        :body {:type "file"
               :path (:path file)
@@ -303,25 +285,22 @@
       (handler (get-content-request (:org/name org0) (:repo/name repo0) (:path file) (-> branch :commit :sha))))))
 
 (defspec get-content-supports-refs
-  10
   (prop/for-all
-   [{:keys [handler org0 repo0 file branch-name]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
-                                                            branch-name mock-gen/ref-name
-                                                            _ (mock-gen/branch (:repo/jgit repo0) branch-name)
-                                                            file (mock-gen/random-file (:repo/jgit repo0) branch-name)]
-                                                    (assoc database :branch-name branch-name :file file))]
+   [{:keys [handler org0 repo0 file branch]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
+                                                       branch (mock-gen/branch (:repo/jgit repo0) :num-commits 1)
+                                                       file (mock-gen/random-file (:repo/jgit repo0) (:name branch))]
+                                               (assoc database :branch branch :file file))]
    (= {:status 200
        :body {:type "file"
               :path (:path file)
               :content (base64/encode (:content file) "UTF-8")}}
-      (handler (get-content-request (:org/name org0) (:repo/name repo0) (:path file) branch-name)))))
+      (handler (get-content-request (:org/name org0) (:repo/name repo0) (:path file) (:name branch))))))
 
 (defspec get-content-supports-default-branch
-  10
   (prop/for-all
    [{:keys [handler org0 repo0 file]} (gen/let [branch-name mock-gen/ref-name
                                                 {:keys [repo0] :as database} (mock-gen/database {:repo [[1 {:spec-gen {:repo/attrs {:default_branch branch-name}}}]]})
-                                                branch (mock-gen/branch (:repo/jgit repo0) branch-name)
+                                                _ (mock-gen/branch (:repo/jgit repo0) :name branch-name :num-commits 1)
                                                 file (mock-gen/random-file (:repo/jgit repo0) branch-name)]
                                         (assoc database :file file))]
    (= {:status 200
