@@ -246,9 +246,11 @@
 (defspec get-tree-respects-response-schema
   10
   (prop/for-all
-   [{:keys [handler org0 repo0 tree0]} (mock-gen/database {:tree [[1]]})]
+   [{:keys [handler org0 repo0 tree]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
+                                                tree (mock-gen/tree (:repo/jgit repo0))]
+                                        (assoc database :tree tree))]
    (m/validate get-tree-response-schema
-               (handler (get-tree-request (:org/name org0) (:repo/name repo0) (:sha tree0))))))
+               (handler (get-tree-request (:org/name org0) (:repo/name repo0) (:sha tree))))))
 
 (defn commits-path [org repo]
   (str "/repos/" org "/" repo "/git/commits"))
@@ -274,12 +276,13 @@
 (defspec create-commit-adds-commit-to-repo
   10
   (prop/for-all
-   [{:keys [handler org0 repo0 tree0]} (mock-gen/database {:tree [[1]]})
-    message gen/string]
+   [{:keys [handler org0 repo0 tree]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
+                                                tree (mock-gen/tree (:repo/jgit repo0))]
+                                        (assoc database :tree tree))
+    commit mock-gen/github-commit]
    (let [{{:keys [sha]} :body} (handler (create-commit-request (:org/name org0)
                                                                (:repo/name repo0)
-                                                               {:message message
-                                                                :tree (:sha tree0)}))]
+                                                               (assoc commit :tree (:sha tree))))]
      (-> repo0 :repo/jgit (jgit/get-commit sha)))))
 
 (def get-commit-response-schema
@@ -294,9 +297,11 @@
 (defspec get-commit-respects-response-schema
   10
   (prop/for-all
-   [{:keys [handler org0 repo0 commit0]} (mock-gen/database {:commit [[1]]})]
+   [{:keys [handler org0 repo0 commit]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
+                                                   commit (mock-gen/commit (:repo/jgit repo0))]
+                                           (assoc database :commit commit))]
    (m/validate get-commit-response-schema
-               (handler (get-commit-request (:org/name org0) (:repo/name repo0) (:sha commit0))))))
+               (handler (get-commit-request (:org/name org0) (:repo/name repo0) (:sha commit))))))
 
 (defn ref-path [org repo ref]
   (str "/repos/" org "/" repo "/git/ref/" ref))
@@ -338,32 +343,23 @@
 (defspec create-ref-adds-ref-to-repo
   10
   (prop/for-all
-   [{:keys [handler org0 repo0 commit0]} (mock-gen/database {:commit [[1]]})
+   [{:keys [handler org0 repo0 commit]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
+                                                   commit (mock-gen/commit (:repo/jgit repo0))]
+                                           (assoc database :commit commit))
     ref (gen/fmap #(str "refs/heads/" %) mock-gen/ref-name)]
    (handler (create-ref-request (:org/name org0) (:repo/name repo0) {:ref ref
-                                                                          :sha (:sha commit0)}))
+                                                                          :sha (:sha commit)}))
    (-> repo0 :repo/jgit (jgit/get-reference ref))))
 
 (defspec update-ref-updates-the-ref
   10
   (prop/for-all
-   [org-name object-name-gen
-    repo (repo-gen)
-    ref (gen/not-empty gen/string-alphanumeric)]
-   (with-handler {:orgs [{:name org-name
-                          :repos [repo]}]}
-     (let [{{tree-sha :sha} :body} (create-tree org-name (:name repo) {:tree [{:path "a" :mode "100644" :type "blob" :content "a"}]})
-           {{:keys [sha]} :body} (create-commit org-name (:name repo) {:message "some message"
-                                                                       :tree tree-sha})]
-       (create-ref org-name (:name repo) {:ref (str "refs/heads/" ref)
-                                          :sha sha})
-       (let [{{tree-sha :sha} :body} (create-tree org-name (:name repo) {:base_tree tree-sha :tree [{:path "a" :mode "100644" :type "blob" :content "a1"}]})
-             {{:keys [sha]} :body} (create-commit org-name (:name repo) {:message "some message"
-                                                                         :tree tree-sha
-                                                                         :parents [sha]})]
-         (update-ref org-name (:name repo) (str "heads/" ref) {:sha sha})
-         (match? {:object {:sha sha}}
-                 (:body (get-ref org-name (:name repo) (str "heads/" ref)))))))))
+   [{:keys [handler org0 repo0 branch commit]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
+                                                  branch (mock-gen/branch (:repo/jgit repo0))
+                                                  commit (mock-gen/commit (:repo/jgit repo0) (-> branch :commit :sha))]
+                                          (assoc database :branch branch :commit commit))]
+   (handler (update-ref-request (:org/name org0) (:repo/name repo0) (str "heads/" (:name branch)) {:sha (:sha commit)}))
+   (= #tap (:sha commit) #tap (-> repo0 :repo/jgit (jgit/get-reference (str "refs/heads/" (:name branch))) :object :sha))))
 
 (defspec delete-ref-removes-ref-from-repo
   10

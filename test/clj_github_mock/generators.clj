@@ -72,25 +72,34 @@
         (dissoc :content)
         (assoc :sha nil))))
 
-(defn changes [github-tree]
-  (gen/vector-distinct-by :path (gen/one-of [(update-gen github-tree) (delete-gen github-tree)]) {:min-elements 1}))
+; TODO support creating new files
+(defn changes [base-github-tree]
+  (if (empty? base-github-tree)
+    github-tree
+    (gen/vector-distinct-by :path (gen/one-of [(update-gen base-github-tree) (delete-gen base-github-tree)]) {:min-elements 1})))
 
 (defn github-tree-changes [base-github-tree]
   (if base-github-tree
     (changes base-github-tree)
     github-tree))
 
+(defn tree
+  ([repo]
+   (tree repo nil))
+  ([repo base-tree-sha]
+   (let [base-tree (when base-tree-sha
+                     (jgit/get-flatten-tree repo base-tree-sha))]
+     (gen/let [tree (github-tree-changes (:tree base-tree))]
+       (jgit/create-tree! repo (assoc-some {:tree tree} :base_tree base-tree-sha))))))
+
 (defn commit
   ([repo]
    (commit repo nil))
   ([repo parent-commit-sha]
-   (let [base-tree (when parent-commit-sha
-                     (as-> (jgit/get-commit repo parent-commit-sha) $
-                       (jgit/get-flatten-tree repo (-> $ :tree :sha))))]
-     (gen/let [tree (github-tree-changes (:tree base-tree))
+   (let [base-tree-sha (when parent-commit-sha (-> (jgit/get-commit repo parent-commit-sha) :tree :sha))]
+     (gen/let [tree (tree repo base-tree-sha)
                gc github-commit]
-       (as-> (jgit/create-tree! repo (assoc-some {:tree tree} :base_tree (:sha base-tree))) $
-         (jgit/create-commit! repo (assoc-some gc :tree (:sha $) :parents (when parent-commit-sha [parent-commit-sha]))))))))
+       (jgit/create-commit! repo (assoc-some gc :tree (:sha tree) :parents (when parent-commit-sha [parent-commit-sha])))))))
 
 (defn- commit-history [repo base-commit num-commits]
   (if (= 0 num-commits)
@@ -121,25 +130,7 @@
                          [:repo/attrs [:map
                                        [:default_branch [:= "main"]]]]
                          [:repo/jgit [:any {:gen/fmap (fn [_] (jgit/empty-repo))}]]]
-          :relations {:repo/org [:org :org/name]}}
-   :tree {:prefix :tree
-          :datastore :jgit
-          :malli-schema [:map
-                         [:tree/id :uuid]
-                         [:tree [:any {:gen/gen github-tree}]]]
-          :relations {:tree/repo [:repo :repo/id]}}
-   :commit {:prefix :commit
-            :datastore :jgit
-            :malli-schema [:map
-                           [:commit/id :uuid]
-                           [:commit [:any {:gen/gen github-commit}]]]
-            :relations {:commit/tree [:tree :tree/id]}
-                :constraints {:commit/tree #{:uniq}}}
-   :branch {:prefix :branch
-            :datastore :jgit
-            :malli-schema [:map
-                           [:ref [:string {:gen/gen (gen/fmap #(str "refs/heads/" %) (unique-name))}]]]
-            :relations {:branch/commit [:commit :commit/id]}}})
+          :relations {:repo/org [:org :org/name]}}})
 
 (defn malli-create-gen
   [ent-db]
@@ -178,40 +169,13 @@
       (sm/add-ents query)
       (sm/visit-ents-once :spec-gen malli-gen)))
 
-(defn datastore [{:keys [schema]} {:keys [ent-type]}]
-  (:datastore (ent-type schema)))
-
-(defn insert-jgit [database {:keys [trees commits]} {:keys [ent-type spec-gen]}]
-  (case ent-type
-    :tree
-    (let [repo (:repo/jgit (database/lookup database [:repo/id (:tree/repo spec-gen)]))
-          tree (merge spec-gen
-                      (jgit/create-tree! repo spec-gen))]
-      (swap! trees assoc (:tree/id spec-gen) tree)
-      tree)
-    :commit
-    (let [tree (get @trees (:commit/tree spec-gen))
-          repo (:repo/jgit (database/lookup database [:repo/id (:tree/repo tree)]))
-          commit (merge spec-gen
-                        (jgit/create-commit! repo (assoc (:commit spec-gen) :tree (:sha tree))))]
-      (swap! commits assoc (:commit/id spec-gen) commit)
-      commit)
-    :branch
-    (let [commit (get @commits (:branch/commit spec-gen))
-          tree (get @trees (:commit/tree commit))
-          repo (:repo/jgit (database/lookup database [:repo/id (:tree/repo tree)]))]
-      (merge spec-gen
-             (jgit/create-reference! repo (assoc spec-gen :sha (:sha commit)))))))
-
 (defn insert-datascript [database ent-db {:keys [spec-gen] :as ent-attrs}]
   (let [datoms (assoc-ent-at-foreign-keys ent-db ent-attrs)]
     (d/transact! database [datoms])
     spec-gen))
 
 (defn insert [database ent-db ent-attrs]
-  (case (datastore ent-db ent-attrs)
-    :datascript (insert-datascript database ent-db ent-attrs)
-    :jgit (insert-jgit database ent-db ent-attrs)))
+  (insert-datascript database ent-db ent-attrs))
 
 (defn ent-data [ent-db ent]
   (:inserted-data (sm/ent-attrs ent-db ent)))
@@ -233,9 +197,7 @@
      (let [database (database/create {})
            ent-db (-> (ent-db-malli-gen {:schema (schema)
                                          :gen-options {:rnd-state (atom rnd)
-                                                       :size size}
-                                         :trees (atom {})
-                                         :commits (atom {})}
+                                                       :size size}}
                                        query)
                      (sm/visit-ents-once :inserted-data (partial insert database)))]
        (rose/pure
