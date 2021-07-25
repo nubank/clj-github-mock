@@ -43,7 +43,7 @@
 
 (def github-tree+changes-gen
   (gen/let [tree mock-gen/github-tree
-            changes (gen/vector-distinct-by :path (gen/one-of [(update-gen tree) (delete-gen tree)]) {:min-elements 1})]
+            changes (mock-gen/github-tree-changes tree)]
     {:tree tree :changes changes}))
 
 (defn changes->edits [changes]
