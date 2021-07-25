@@ -128,7 +128,7 @@
       (commit-history repo next-commit (dec num-commits)))))
 
 (defn branch
-  "Creates a generator that given a jgit repository generates a branch and a sequence of commits in it.
+  "Creates a generator that given a jgit repository generates in it a branch pointing to a sequence of commits.
   The generator can be customized with the following options:
   - `:name`: the name of the branch, if not set a random name is generated
   - `num-commits`: the number of commits to be generated, if not set a random number of commits is generated
@@ -141,8 +141,8 @@
     (jgit/get-branch repo branch-name)))
 
 (defn random-file
-  "Creates a generator that given a jgit repository and a branch name selects randomly a file contained in that branch.
-  The file is return as a github tree object."
+  "Creates a generator that given a jgit repository and a branch name randomly selects a file contained in that branch.
+  The file is returned as a github tree object."
   [repo branch-name]
   (let [branch (jgit/get-branch repo branch-name)
         commit (jgit/get-commit repo (-> branch :commit :sha))
