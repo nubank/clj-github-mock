@@ -46,8 +46,6 @@
        (mapv (fn [[path tree-object]]
                (assoc tree-object :path path)))))
 
-(apply merge [{1 2} {3 4 5 6}])
-
 (def ^:private modes-frequency {"100644" 95 "100755" 5})
 
 (def ^:private github-tree-object
