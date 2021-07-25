@@ -1,9 +1,7 @@
 (ns clj-github-mock.core
   (:require [clj-github-mock.handlers.repos :as repos]
             [clj-github-mock.impl.database :as database]
-            [reitit.ring :as ring]
             [ring.middleware.json :as middleware.json]
-            [ring.middleware.params :as middleware.params]
             [ring.mock.request :as mock]))
 
 (defn ring-handler

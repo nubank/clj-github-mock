@@ -60,7 +60,7 @@
 (defspec create-org-repo-respects-response-schema
   (prop/for-all
    [{:keys [handler org0]} (mock-gen/database {:org [[1]]})
-    repo-name mock-gen/ref-name]
+    repo-name mock-gen/object-name]
    (m/validate
     create-org-repo-response-schema
     (handler (create-org-repo-request (:org/name org0) {:name repo-name})))))
@@ -74,7 +74,7 @@
 (defspec create-org-repo-adds-repo-to-the-org
   (prop/for-all
    [{:keys [handler database org0]} (mock-gen/database {:org [[1]]})
-    repo-name mock-gen/ref-name]
+    repo-name mock-gen/object-name]
    (handler (create-org-repo-request (:org/name org0) {:name repo-name}))
    (database/find-repo database (:org/name org0) repo-name)))
 
@@ -178,10 +178,11 @@
    [{:keys [handler org0 repo0 tree]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
                                                 tree (mock-gen/tree (:repo/jgit repo0))]
                                         (assoc database :tree tree))
-    commit mock-gen/github-commit]
+    message gen/string]
    (let [{{:keys [sha]} :body} (handler (create-commit-request (:org/name org0)
                                                                (:repo/name repo0)
-                                                               (assoc commit :tree (:sha tree))))]
+                                                               {:message message
+                                                                :tree (:sha tree)}))]
      (-> repo0 :repo/jgit (jgit/get-commit sha)))))
 
 (def get-commit-response-schema
@@ -226,7 +227,7 @@
    [{:keys [handler org0 repo0 commit]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
                                                    commit (mock-gen/commit (:repo/jgit repo0))]
                                            (assoc database :commit commit))
-    ref (gen/fmap #(str "refs/heads/" %) mock-gen/ref-name)]
+    ref (gen/fmap #(str "refs/heads/" %) mock-gen/object-name)]
    (handler (create-ref-request (:org/name org0) (:repo/name repo0) {:ref ref
                                                                           :sha (:sha commit)}))
    (-> repo0 :repo/jgit (jgit/get-reference ref))))
@@ -298,7 +299,7 @@
 
 (defspec get-content-supports-default-branch
   (prop/for-all
-   [{:keys [handler org0 repo0 file]} (gen/let [branch-name mock-gen/ref-name
+   [{:keys [handler org0 repo0 file]} (gen/let [branch-name mock-gen/object-name
                                                 {:keys [repo0] :as database} (mock-gen/database {:repo [[1 {:spec-gen {:repo/attrs {:default_branch branch-name}}}]]})
                                                 _ (mock-gen/branch (:repo/jgit repo0) :name branch-name :num-commits 1)
                                                 file (mock-gen/random-file (:repo/jgit repo0) branch-name)]
