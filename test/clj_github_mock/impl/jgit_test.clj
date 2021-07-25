@@ -1,12 +1,12 @@
 (ns clj-github-mock.impl.jgit-test
   (:require  [base64-clj.core :as base64]
              [clj-github-mock.impl.jgit :as sut]
-             [clojure.test :refer :all]
              [clojure.test.check.clojure-test :refer [defspec]]
              [clojure.test.check.generators :as gen]
              [clojure.test.check.properties :as prop]
              [editscript.core :as editscript]
              [matcher-combinators.standalone :refer [match?]]
+             [matcher-combinators.matchers :as matchers]
              [clj-github-mock.generators :as mock-gen]))
 
 (defn decode-base64 [content]
@@ -27,8 +27,9 @@
    [tree mock-gen/github-tree]
    (let [repo (sut/empty-repo)
          {:keys [sha]} (sut/create-tree! repo {:tree tree})]
-     (match? {:sha sha}
-             (sut/get-tree repo sha)))))
+     (match? {:sha sha
+              :tree (matchers/in-any-order tree)}
+             (sut/get-flatten-tree repo sha)))))
 
 (defn delete-gen [tree]
   (gen/let [item (gen/elements tree)]
