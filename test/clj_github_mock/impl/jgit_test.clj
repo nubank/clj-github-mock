@@ -31,17 +31,6 @@
               :tree (matchers/in-any-order tree)}
              (sut/get-flatten-tree repo sha)))))
 
-(defn delete-gen [tree]
-  (gen/let [item (gen/elements tree)]
-    (-> item
-        (dissoc :content)
-        (assoc :sha nil))))
-
-(defn update-gen [tree]
-  (gen/let [item (gen/elements tree)
-            new-content (gen/not-empty gen/string)]
-    (assoc item :content new-content)))
-
 (def github-tree+changes-gen
   (gen/let [tree mock-gen/github-tree
             changes (mock-gen/github-tree-changes tree)]
