@@ -9,7 +9,7 @@
             [datascript.core :as d]
             [lambdaisland.regal.generator :as regal-gen]
             [malli.generator :as mg]
-            [medley.core :refer [assoc-some map-keys map-kv]]
+            [medley.core :refer [assoc-some map-keys]]
             [reifyhealth.specmonstah.core :as sm]
             [reifyhealth.specmonstah.spec-gen :as sg]))
 
