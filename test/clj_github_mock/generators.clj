@@ -9,7 +9,7 @@
             [datascript.core :as d]
             [lambdaisland.regal.generator :as regal-gen]
             [malli.generator :as mg]
-            [medley.core :refer [assoc-some map-keys]]
+            [medley.core :refer [assoc-some map-keys map-vals]]
             [reifyhealth.specmonstah.core :as sm]
             [reifyhealth.specmonstah.spec-gen :as sg]))
 
@@ -87,7 +87,7 @@
 ; TODO support creating new files
 (defn github-tree-changes
   "Creates a generator that given a github tree generates changes in that tree.
-  The changes are itself a github tree."
+  The changes are themselves a github tree."
   [github-tree]
   (if (empty? github-tree)
     (gen/return github-tree)
@@ -132,7 +132,9 @@
   The generator can be customized with the following options:
   - `:name`: the name of the branch, if not set a random name is generated
   - `num-commits`: the number of commits to be generated, if not set a random number of commits is generated
-  - `base-branch`: the generated branch will be derived from the base-branch, if not set an orphan branch is generated"
+  - `base-branch`: the generated branch will be derived from the base-branch, if not set an orphan branch is generated
+
+  Note: the generator is not purely functional since a jgit repository is mutable"
   [repo & {:keys [name num-commits base-branch]}]
   (gen/let [branch-name (if name (gen/return name) object-name)
             num-commits (if num-commits (gen/return num-commits) (gen/fmap inc (gen/scale #(/ % 10) gen/nat)))
@@ -142,7 +144,9 @@
 
 (defn random-file
   "Creates a generator that given a jgit repository and a branch name randomly selects a file contained in that branch.
-  The file is returned as a github tree object."
+  The file is returned as a github tree object.
+
+  Note: the generator is not purely functional since a jgit repository is mutable"
   [repo branch-name]
   (let [branch (jgit/get-branch repo branch-name)
         commit (jgit/get-commit repo (-> branch :commit :sha))
@@ -164,10 +168,8 @@
 
 (defn- malli-create-gen
   [ent-db]
-  (update ent-db :schema
-          #(->> (map (fn [[ent-name {:keys [malli-schema] :as ent-spec}]]
-                       [ent-name (assoc ent-spec :malli-gen (mg/generator malli-schema))]) %)
-                (into {}))))
+  (update ent-db :schema #(map-vals (fn [{:keys [malli-schema] :as ent-spec}]
+                                      (assoc ent-spec :malli-gen (mg/generator malli-schema))) %)))
 
 (defn- malli-gen-ent-val
   [{{:keys [rnd-state size]} :gen-options :as ent-db} {:keys [ent-name]}]
@@ -179,7 +181,7 @@
 (defn- foreign-key-ent [[_ foreign-key-attr :as path] foreign-key-val]
   (cond
     ; TODO: use constraints to detect if it is a multi relationship
-    (vector? foreign-key-val) (into #{} (map (partial foreign-key-ent path) foreign-key-val))
+    (vector? foreign-key-val) (set (map (partial foreign-key-ent path) foreign-key-val))
     :else {foreign-key-attr foreign-key-val}))
 
 (defn- assoc-ent-at-foreign-keys [db {:keys [ent-type spec-gen]}]
