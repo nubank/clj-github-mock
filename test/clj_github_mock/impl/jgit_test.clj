@@ -1,13 +1,13 @@
 (ns clj-github-mock.impl.jgit-test
   (:require  [base64-clj.core :as base64]
+             [clj-github-mock.generators :as mock-gen]
              [clj-github-mock.impl.jgit :as sut]
              [clojure.test.check.clojure-test :refer [defspec]]
              [clojure.test.check.generators :as gen]
              [clojure.test.check.properties :as prop]
              [editscript.core :as editscript]
-             [matcher-combinators.standalone :refer [match?]]
              [matcher-combinators.matchers :as matchers]
-             [clj-github-mock.generators :as mock-gen]))
+             [matcher-combinators.standalone :refer [match?]]))
 
 (defn decode-base64 [content]
   (if (empty? content)

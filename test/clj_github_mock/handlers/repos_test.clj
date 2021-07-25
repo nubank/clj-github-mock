@@ -1,5 +1,8 @@
 (ns clj-github-mock.handlers.repos-test
   (:require [base64-clj.core :as base64]
+            [clj-github-mock.generators :as mock-gen]
+            [clj-github-mock.impl.database :as database]
+            [clj-github-mock.impl.jgit :as jgit]
             [clojure.data :as data]
             [clojure.string :as string]
             [clojure.test.check.clojure-test :refer [defspec]]
@@ -8,10 +11,7 @@
             [malli.core :as m]
             [matcher-combinators.standalone :refer [match?]]
             [matcher-combinators.test]
-            [clj-github-mock.generators :as mock-gen]
-            [ring.mock.request :as mock]
-            [clj-github-mock.impl.jgit :as jgit]
-            [clj-github-mock.impl.database :as database]))
+            [ring.mock.request :as mock]))
 
 (defn org-repos-path [org-name]
   (str "/orgs/" org-name "/repos"))
@@ -37,11 +37,11 @@
 (defspec list-org-repos-return-all-repos
   (prop/for-all
    [{:keys [handler ent-db ents]} (mock-gen/database {:org [[:org1]
-                                                                [:org2]
-                                                                [:org3]]
-                                                          :repo [[2 {:refs {:repo/org :org1}}]
-                                                                 [2 {:refs {:repo/org :org2}}]
-                                                                 [2 {:refs {:repo/org :org3}}]]})]
+                                                            [:org2]
+                                                            [:org3]]
+                                                      :repo [[2 {:refs {:repo/org :org1}}]
+                                                             [2 {:refs {:repo/org :org2}}]
+                                                             [2 {:refs {:repo/org :org3}}]]})]
    (match? (set (map :repo/name (:repo ents)))
            (set (map :name (mapcat #(:body (handler (list-org-repos-request (:org/name %)))) (:org ents)))))))
 
@@ -116,8 +116,8 @@
    (let [repo-before (:body (handler (get-org-repo-request (:org/name org0) (:repo/name repo0))))
          _ (handler (update-org-repo-request (:org/name org0) (:repo/name repo0) {:visibility "private"}))
          repo-after (:body (handler (get-org-repo-request (:org/name org0) (:repo/name repo0))))]
-       (match? [nil {:visibility "private"} any?]
-               (data/diff repo-before repo-after)))))
+     (match? [nil {:visibility "private"} any?]
+             (data/diff repo-before repo-after)))))
 
 (defn trees-path [org repo]
   (str "/repos/" org "/" repo "/git/trees"))
@@ -197,8 +197,8 @@
 (defspec get-commit-respects-response-schema
   (prop/for-all
    [{:keys [handler org0 repo0 commit]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
-                                                   commit (mock-gen/commit (:repo/jgit repo0))]
-                                           (assoc database :commit commit))]
+                                                  commit (mock-gen/commit (:repo/jgit repo0))]
+                                          (assoc database :commit commit))]
    (m/validate get-commit-response-schema
                (handler (get-commit-request (:org/name org0) (:repo/name repo0) (:sha commit))))))
 
@@ -225,19 +225,19 @@
 (defspec create-ref-adds-ref-to-repo
   (prop/for-all
    [{:keys [handler org0 repo0 commit]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
-                                                   commit (mock-gen/commit (:repo/jgit repo0))]
-                                           (assoc database :commit commit))
+                                                  commit (mock-gen/commit (:repo/jgit repo0))]
+                                          (assoc database :commit commit))
     ref (gen/fmap #(str "refs/heads/" %) mock-gen/object-name)]
    (handler (create-ref-request (:org/name org0) (:repo/name repo0) {:ref ref
-                                                                          :sha (:sha commit)}))
+                                                                     :sha (:sha commit)}))
    (-> repo0 :repo/jgit (jgit/get-reference ref))))
 
 (defspec update-ref-updates-the-ref
   (prop/for-all
    [{:keys [handler org0 repo0 branch commit]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
-                                                  branch (mock-gen/branch (:repo/jgit repo0))
-                                                  commit (mock-gen/commit (:repo/jgit repo0) (-> branch :commit :sha))]
-                                          (assoc database :branch branch :commit commit))]
+                                                         branch (mock-gen/branch (:repo/jgit repo0))
+                                                         commit (mock-gen/commit (:repo/jgit repo0) (-> branch :commit :sha))]
+                                                 (assoc database :branch branch :commit commit))]
    (handler (update-ref-request (:org/name org0) (:repo/name repo0) (str "heads/" (:name branch)) {:sha (:sha commit)}))
    (= (:sha commit) (-> repo0 :repo/jgit (jgit/get-reference (str "refs/heads/" (:name branch))) :object :sha))))
 
@@ -269,7 +269,7 @@
 
 (defn get-content-request
   ([org repo path]
-   (mock/request :get (contents-path org repo path))) 
+   (mock/request :get (contents-path org repo path)))
   ([org repo path ref]
    (mock/request :get (contents-path org repo path) {"ref" ref})))
 
