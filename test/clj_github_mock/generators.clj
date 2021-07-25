@@ -151,11 +151,9 @@
 
 (defn- schema []
   {:org {:prefix :org
-         :datastore :datascript
          :malli-schema [:map
                         [:org/name [:string {:gen/gen (unique-object-name)}]]]}
    :repo {:prefix :repo
-          :datastore :datascript
           :malli-schema [:map
                          [:repo/id :uuid]
                          [:repo/name [:string {:gen/gen (unique-object-name)}]]
