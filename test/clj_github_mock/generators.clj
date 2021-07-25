@@ -9,7 +9,7 @@
             [datascript.core :as d]
             [lambdaisland.regal.generator :as regal-gen]
             [malli.generator :as mg]
-            [medley.core :refer [assoc-some]]
+            [medley.core :refer [assoc-some map-keys map-kv]]
             [reifyhealth.specmonstah.core :as sm]
             [reifyhealth.specmonstah.spec-gen :as sg]))
 
@@ -31,24 +31,22 @@
   "Generates a string that can be used as a blob content."
   gen/string-ascii)
 
-(defn- flatten-map-tree-entry [[obj-name node :as entry]]
+(defn- flatten-map-tree-entry [[obj-name node]]
   (if (:type node)
-    entry
-    (into
-     {}
-     (map (fn [[child-name child-node]]
-            [(str obj-name "/" child-name) child-node])
-          node))))
+    {obj-name node}
+    (map-keys #(str obj-name "/" %) node)))
 
 (defn- map-tree->github-tree [map-tree]
   (->> (walk/postwalk
         (fn [node]
           (if (and (map? node) (not (:type node)))
-            (into {} (map flatten-map-tree-entry node))
+            (apply merge (map flatten-map-tree-entry node))
             node))
         map-tree)
-       (mapv (fn [[path content]]
-               (assoc content :path path)))))
+       (mapv (fn [[path tree-object]]
+               (assoc tree-object :path path)))))
+
+(apply merge [{1 2} {3 4 5 6}])
 
 (def ^:private modes-frequency {"100644" 95 "100755" 5})
 
