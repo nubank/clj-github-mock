@@ -90,7 +90,7 @@
 
 (defspec reference-is-added-to-repo
   (prop/for-all
-   [ref (gen/fmap #(str "refs/heads/" %) (gen/not-empty gen/string-alphanumeric))]
+   [ref (gen/fmap #(str "refs/heads/" %) mock-gen/object-name)]
    (let [repo (sut/empty-repo)
          {tree-sha :sha} (sut/create-tree! repo {:tree []})
          {sha :sha} (sut/create-commit! repo {:tree tree-sha :message "test"})]
@@ -102,7 +102,7 @@
 
 (defspec reference-can-be-deleted
   (prop/for-all
-   [ref (gen/fmap #(str "refs/heads/" %) (gen/not-empty gen/string-alphanumeric))]
+   [ref (gen/fmap #(str "refs/heads/" %) mock-gen/object-name)]
    (let [repo (sut/empty-repo)
          {tree-sha :sha} (sut/create-tree! repo {:tree [{:path "a" :mode "100644" :type "blob" :content "a"}]})
          {sha :sha} (sut/create-commit! repo {:tree tree-sha :message "test"})]
@@ -112,7 +112,7 @@
 
 (defspec can-get-branch-info
   (prop/for-all
-   [branch (gen/not-empty gen/string-alphanumeric)]
+   [branch mock-gen/object-name]
    (let [ref (str "refs/heads/" branch)
          repo (sut/empty-repo)
          {tree-sha :sha} (sut/create-tree! repo {:tree []})
