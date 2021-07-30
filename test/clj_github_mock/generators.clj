@@ -161,6 +161,7 @@
           :malli-schema [:map
                          [:repo/id :uuid]
                          [:repo/name [:string {:gen/gen (unique-object-name)}]]
+                         [:repo/next-issue-number [:= 1]]
                          [:repo/attrs [:map
                                        [:default_branch [:= "main"]]]]
                          [:repo/jgit [:any {:gen/fmap (fn [_] (jgit/empty-repo))}]]]

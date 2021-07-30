@@ -113,6 +113,19 @@
        :body content}
       {:status 404})))
 
+(defn- pull-body [pull]
+  (merge {:number (:issue/number pull)}
+         (:issue/attrs pull)))
+
+(defn post-pull-handler [{database :database
+                          {repo-id :repo/id
+                           next-issue-number :repo/next-issue-number} :repo
+                          body :body}]
+  (database/upsert-issue database repo-id next-issue-number :pull body)
+  (database/transact database [{:repo/id repo-id
+                                :repo/next-issue-number (inc next-issue-number)}])
+  {:status 201
+   :body (pull-body (database/find-pull-by-repo-id-number database repo-id next-issue-number))})
 (defn repo-middleware [handler]
   (fn [{database :database {:keys [org repo]} :path-params :as request}]
     (let [repo (database/find-repo database org repo)]
@@ -133,7 +146,8 @@
                        :delete delete-ref-handler}]
     ["/git/ref/*ref" {:get get-ref-handler}]
     ["/branches/:branch" {:get get-branch-handler}]
-    ["/contents/*path" {:get get-content-handler}]]])
+    ["/contents/*path" {:get get-content-handler}]
+    ["/pulls" {:post post-pull-handler}]]])
 
 (defn handler [database]
   (-> (ring/ring-handler

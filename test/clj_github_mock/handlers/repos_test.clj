@@ -309,3 +309,24 @@
               :path (:path file)
               :content (base64/encode (:content file) "UTF-8")}}
       (handler (get-content-request (:org/name org0) (:repo/name repo0) (:path file))))))
+
+(defn pulls-path [org repo]
+  (str "/repos/" org "/" repo "/pulls"))
+
+(defn pull-path [org repo number]
+  (str (pulls-path org repo) "/" number))
+
+(defn create-pull-request [org repo body]
+  (-> (mock/request :post (pulls-path org repo))
+      (assoc :body body)))
+
+(defspec create-pull-request-adds-to-database
+  1
+  (prop/for-all
+   [{:keys [handler database org0 repo0]} (mock-gen/database {:repo [[1]]})
+    title gen/string]
+   (let [{{:keys [number]} :body} (handler (create-pull-request (:org/name org0) (:repo/name repo0) {:title title}))]
+     (match?
+      {:issue/attrs {:title title
+                     :state "open"}}
+      (database/find-pull database (:org/name org0) (:repo/name repo0) number)))))

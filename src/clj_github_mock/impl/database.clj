@@ -4,10 +4,14 @@
 
 (def repo-defaults {:default_branch "main"})
 
+(defn- uuid []
+  (str (java.util.UUID/randomUUID)))
+
 (defn- repo-datums [org-name repo-name repo-attrs]
-  [{:repo/id (str (java.util.UUID/randomUUID))
+  [{:repo/id (uuid)
     :repo/name repo-name
     :repo/org [:org/name org-name]
+    :repo/next-issue-number 1
     :repo/attrs (merge repo-defaults repo-attrs)
     :repo/jgit (jgit/empty-repo)}])
 
@@ -21,7 +25,9 @@
 (defn create [{:keys [orgs] :as _initial-state}]
   (let [schema {:org/name {:db/unique :db.unique/identity}
                 :repo/id {:db/unique :db.unique/identity}
-                :repo/org {:db/valueType :db.type/ref}}
+                :issue/id {:db/unique :db.unique/identity}
+                :repo/org {:db/valueType :db.type/ref}
+                :issue/repo {:db/valueType :db.type/ref}}
         conn (d/create-conn schema)]
     (d/transact! conn (mapcat org-datums orgs))
     conn))
@@ -45,6 +51,42 @@
          [?r :repo/name ?repo-name]
          [?r :repo/org ?org]
          [?org :org/name ?org-name]] @database org-name repo-name))
+
+(def issue-defaults {:state "open"})
+
+(defn issue-datums [repo-id issue-number issue-type issue-attrs]
+  [{:issue/id (uuid)
+    :issue/number issue-number
+    :issue/repo [:repo/id repo-id]
+    :issue/type  issue-type
+    :issue/attrs (merge issue-defaults issue-attrs)}])
+
+(defn upsert-issue [database repo-id issue-number issue-type attrs]
+  (d/transact database (issue-datums repo-id issue-number issue-type attrs)))
+
+(defn find-pull [database org-name repo-name pull-number]
+  (d/q '[:find (pull ?p [*]) .
+         :in $ ?org-name ?repo-name ?pull-number
+         :where
+         [?r :repo/name ?repo-name]
+         [?r :repo/org ?org]
+         [?p :issue/repo ?r]
+         [?p :issue/type :pull]
+         [?p :issue/number ?pull-number]
+         [?org :org/name ?org-name]] @database org-name repo-name pull-number))
+
+(defn find-pull-by-repo-id-number [database repo-id pull-number]
+  (d/q '[:find (pull ?p [*]) .
+         :in $ ?repo-id ?pull-number
+         :where
+         [?r :repo/id ?repo-id]
+         [?p :issue/repo ?r]
+         [?p :issue/type :pull]
+         [?p :issue/number ?pull-number]
+         [?org :org/name ?org-name]] @database repo-id pull-number))
+
+(defn transact [database datums]
+  (d/transact database datums))
 
 (defn lookup [database eid]
   (d/pull @database '[*] eid))
