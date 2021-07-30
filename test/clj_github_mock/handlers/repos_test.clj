@@ -320,6 +320,9 @@
   (-> (mock/request :post (pulls-path org repo))
       (assoc :body body)))
 
+(defn get-pull-request-request [org repo number]
+  (mock/request :get (pull-path org repo number)))
+
 (defspec create-pull-request-adds-to-database
   (prop/for-all
    [{:keys [handler database org0 repo0]} (mock-gen/database {:repo [[1]]})
@@ -338,3 +341,13 @@
       (-> (handler (create-pull-request (:org/name org0) (:repo/name repo0) {:title title}))
           :body
           :number))))
+
+(defspec can-get-pull-request
+  (prop/for-all
+   [{:keys [handler database org0 repo0 pull0]} (mock-gen/database {:pull [[1]]})]
+   (match? {:status 200
+            :body {:number (:issue/number pull0)
+                   :title (-> pull0 :issue/attrs :title)
+                   :repo {:name (:repo/name repo0)
+                          :full_name (str (:org/name org0) "/" (:repo/name repo0))}}}
+           (handler (get-pull-request-request (:org/name org0) (:repo/name repo0) (:issue/number pull0))))))

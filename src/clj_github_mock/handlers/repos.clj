@@ -113,21 +113,32 @@
        :body content}
       {:status 404})))
 
-(defn- pull-body [pull]
-  (merge {:number (:issue/number pull)}
+(defn- pull-body [pull org repo]
+  (merge {:number (:issue/number pull)
+          :repo (repo-body (:org/name org) repo)}
          (:issue/attrs pull)))
 
 (defn post-pull-handler [{database :database
-                          {repo-id :repo/id} :repo
+                          org :org
+                          {repo-id :repo/id :as repo} :repo
                           body :body}]
   (let [next-issue-number (database/next-issue-number database repo-id)]
     (database/upsert-issue database repo-id next-issue-number :pull body)
     {:status 201
-     :body (pull-body (database/find-pull-by-repo-id-number database repo-id next-issue-number))}))
+     :body (pull-body (database/find-pull-by-repo-id-number database repo-id next-issue-number) org repo)}))
+
+(defn get-pull-handler [{database :database
+                         org :org
+                         {repo-id :repo/id :as repo} :repo
+                         {:keys [number]} :path-params}]
+  {:status 200
+   :body (pull-body (database/find-pull-by-repo-id-number database repo-id (Integer/parseInt number)) org repo)})
+
 (defn repo-middleware [handler]
   (fn [{database :database {:keys [org repo]} :path-params :as request}]
-    (let [repo (database/find-repo database org repo)]
-      (handler (assoc request :repo repo)))))
+    (let [org (database/lookup database [:org/name org])
+          repo (database/find-repo database (:org/name org) repo)]
+      (handler (assoc request :org org :repo repo)))))
 
 (def routes
   [["/orgs/:org/repos" {:get get-repos-handler
@@ -145,7 +156,9 @@
     ["/git/ref/*ref" {:get get-ref-handler}]
     ["/branches/:branch" {:get get-branch-handler}]
     ["/contents/*path" {:get get-content-handler}]
-    ["/pulls" {:post post-pull-handler}]]])
+    ["/pulls"
+     ["" {:post post-pull-handler}]
+     ["/:number" {:get get-pull-handler}]]]])
 
 (defn handler [database]
   (-> (ring/ring-handler
