@@ -1,9 +1,7 @@
 (ns clj-github-mock.core
   (:require [clj-github-mock.handlers.repos :as repos]
             [clj-github-mock.impl.database :as database]
-            [reitit.ring :as ring]
             [ring.middleware.json :as middleware.json]
-            [ring.middleware.params :as middleware.params]
             [ring.mock.request :as mock]))
 
 (defn ring-handler
@@ -23,14 +21,9 @@
   "
   [{:keys [initial-state] :as _opts}]
   (let [conn (database/create initial-state)]
-    (-> (ring/ring-handler
-         (ring/router
-          repos/routes)
-         (ring/create-default-handler))
+    (-> (repos/handler conn)
         (middleware.json/wrap-json-body {:keywords? true})
-        (middleware.json/wrap-json-response)
-        (middleware.params/wrap-params)
-        (database/middleware conn))))
+        (middleware.json/wrap-json-response))))
 
 (defn httpkit-fake-handler
   "Creates a `ring-handler` that is compatible with `http-kit-fake`. Receives the same

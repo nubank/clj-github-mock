@@ -1,14 +1,12 @@
 (ns clj-github-mock.impl.jgit-test
   (:require  [base64-clj.core :as base64]
+             [clj-github-mock.generators :as mock-gen]
              [clj-github-mock.impl.jgit :as sut]
-             [clojure.test :refer :all]
              [clojure.test.check.clojure-test :refer [defspec]]
              [clojure.test.check.generators :as gen]
              [clojure.test.check.properties :as prop]
-             [clojure.walk :as walk]
              [editscript.core :as editscript]
-             [lambdaisland.regal.generator :as rg]
-             [malli.generator :as mg]
+             [matcher-combinators.matchers :as matchers]
              [matcher-combinators.standalone :refer [match?]]))
 
 (defn decode-base64 [content]
@@ -24,64 +22,18 @@
      (= content
         (decode-base64 (:content (sut/get-blob repo sha)))))))
 
-(defn flatten-obj [[obj-name node :as entry]]
-  (if (string? node)
-    entry
-    (into
-     {}
-     (map (fn [[child-name child-node]]
-            [(str obj-name "/" child-name) child-node])
-          (val entry)))))
-
-(defn tree->github-tree [tree]
-  (->> (walk/postwalk
-        (fn [node]
-          (if (map? node)
-            (into {} (map flatten-obj node))
-            node))
-        tree)
-       (map (fn [[path content]]
-              {:path path
-               :mode "100644"
-               :type "blob"
-               :content content}))))
-
-(def object-name [:re {:gen/gen (rg/gen [:+ [:class [\a \z]]])} #"\w+"])
-
-(def github-tree-gen
-  (gen/fmap
-   tree->github-tree
-   (mg/generator [:schema {:registry {::file-content :string
-                                      ::dir [:and
-                                             [:map-of object-name [:ref ::node]]
-                                             [:fn seq]]
-                                      ::node [:or ::file-content ::dir]
-                                      ::root ::dir}}
-                  ::root])))
-
 (defspec tree-is-added-to-repo
-  10
   (prop/for-all
-   [tree github-tree-gen]
+   [tree mock-gen/github-tree]
    (let [repo (sut/empty-repo)
          {:keys [sha]} (sut/create-tree! repo {:tree tree})]
-     (match? {:sha sha}
-             (sut/get-tree repo sha)))))
-
-(defn delete-gen [tree]
-  (gen/let [item (gen/elements tree)]
-    (-> item
-        (dissoc :content)
-        (assoc :sha nil))))
-
-(defn update-gen [tree]
-  (gen/let [item (gen/elements tree)
-            new-content (gen/not-empty gen/string)]
-    (assoc item :content new-content)))
+     (match? {:sha sha
+              :tree (matchers/in-any-order tree)}
+             (sut/get-flatten-tree repo sha)))))
 
 (def github-tree+changes-gen
-  (gen/let [tree github-tree-gen
-            changes (gen/vector-distinct-by :path (gen/one-of [(update-gen tree) (delete-gen tree)]) {:min-elements 1})]
+  (gen/let [tree mock-gen/github-tree
+            changes (mock-gen/github-tree-changes tree)]
     {:tree tree :changes changes}))
 
 (defn changes->edits [changes]
@@ -93,7 +45,6 @@
        (editscript/edits->script)))
 
 (defspec create-tree-preserves-base-tree
-  10
   (prop/for-all
    [{:keys [tree changes]} github-tree+changes-gen]
    (let [repo (sut/empty-repo)
@@ -105,9 +56,8 @@
         (editscript/patch content-before (changes->edits changes))))))
 
 (defspec commit-is-added-to-repo
-  10
   (prop/for-all
-   [tree github-tree-gen
+   [tree mock-gen/github-tree
     message gen/string]
    (let [repo (sut/empty-repo)
          {tree-sha :sha} (sut/create-tree! repo {:tree tree})
@@ -117,7 +67,6 @@
              (sut/get-commit repo sha)))))
 
 (defspec create-commit-sets-parent
-  10
   (prop/for-all
    [{:keys [tree changes]} github-tree+changes-gen
     message gen/string]
@@ -131,7 +80,7 @@
 
 (defspec reference-is-added-to-repo
   (prop/for-all
-   [ref (gen/fmap #(str "refs/heads/" %) (gen/not-empty gen/string-alphanumeric))]
+   [ref (gen/fmap #(str "refs/heads/" %) mock-gen/object-name)]
    (let [repo (sut/empty-repo)
          {tree-sha :sha} (sut/create-tree! repo {:tree []})
          {sha :sha} (sut/create-commit! repo {:tree tree-sha :message "test"})]
@@ -143,7 +92,7 @@
 
 (defspec reference-can-be-deleted
   (prop/for-all
-   [ref (gen/fmap #(str "refs/heads/" %) (gen/not-empty gen/string-alphanumeric))]
+   [ref (gen/fmap #(str "refs/heads/" %) mock-gen/object-name)]
    (let [repo (sut/empty-repo)
          {tree-sha :sha} (sut/create-tree! repo {:tree [{:path "a" :mode "100644" :type "blob" :content "a"}]})
          {sha :sha} (sut/create-commit! repo {:tree tree-sha :message "test"})]
@@ -153,7 +102,7 @@
 
 (defspec can-get-branch-info
   (prop/for-all
-   [branch (gen/not-empty gen/string-alphanumeric)]
+   [branch mock-gen/object-name]
    (let [ref (str "refs/heads/" branch)
          repo (sut/empty-repo)
          {tree-sha :sha} (sut/create-tree! repo {:tree []})
@@ -167,9 +116,8 @@
         (sut/get-branch repo branch)))))
 
 (defspec can-get-content
-  10
   (prop/for-all
-   [tree github-tree-gen]
+   [tree mock-gen/github-tree]
    (let [repo (sut/empty-repo)
          {tree-sha :sha} (sut/create-tree! repo {:tree tree})
          {:keys [sha]} (sut/create-commit! repo {:tree tree-sha :message "test" :parents []})]

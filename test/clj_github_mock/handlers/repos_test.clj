@@ -1,74 +1,17 @@
 (ns clj-github-mock.handlers.repos-test
   (:require [base64-clj.core :as base64]
-            [cheshire.core :as json]
-            [clj-github-mock.core :refer [ring-handler]]
-            [clj-http.client :as http]
-            [clj-http.fake :refer [with-fake-routes]]
+            [clj-github-mock.generators :as mock-gen]
+            [clj-github-mock.impl.database :as database]
+            [clj-github-mock.impl.jgit :as jgit]
             [clojure.data :as data]
-            [clojure.set :as set]
             [clojure.string :as string]
-            [clojure.test :refer :all]
             [clojure.test.check.clojure-test :refer [defspec]]
             [clojure.test.check.generators :as gen]
             [clojure.test.check.properties :as prop]
-            [clojure.walk :as walk]
-            [lambdaisland.regal.generator :as rg]
             [malli.core :as m]
-            [malli.generator :as mg]
             [matcher-combinators.standalone :refer [match?]]
-            [matcher-combinators.test]))
-
-(defn github-url [endpoint]
-  (str "https://api.github.com" endpoint))
-
-(defmacro with-handler [initial-state & body]
-  `(with-fake-routes {#"https://api.github.com/.*" (ring-handler {:initial-state ~initial-state})}
-     ~@body))
-
-(defn deep-merge [a & maps]
-  (if (map? a)
-    (apply merge-with deep-merge a maps)
-    (apply merge-with deep-merge maps)))
-
-(defn request [base-request]
-  (http/request (deep-merge {:method :get
-                             :headers {"Content-Type" "application/json"}
-                             :as :json
-                             :throw-exceptions false}
-                            (-> base-request
-                                (assoc :url (github-url (:path base-request)))
-                                (update :body json/encode)
-                                (dissoc :path)))))
-
-(def object-name [:re {:gen/gen (rg/gen [:+ [:class [\a \z]]])} #"\w+"])
-
-(def object-name-gen (mg/generator object-name))
-
-(defn repo-gen
-  ([]
-   (repo-gen object-name-gen))
-  ([repo-name-gen]
-   (mg/generator [:map
-                  [:name [:string {:gen/gen repo-name-gen}]]])))
-
-(def repos-gen
-  (gen/let [repos-names (mg/generator [:set {:min 1 :max 5} object-name])]
-    (apply gen/tuple
-           (map #(repo-gen (gen/return %)) repos-names))))
-
-(defn org-gen
-  ([]
-   (org-gen object-name-gen))
-  ([org-name-gen]
-   (gen/let [org-name org-name-gen]
-     (mg/generator [:map
-                    [:name [:string {:gen/gen (gen/return org-name)}]]
-                    [:repos [:vector {:gen/gen repos-gen} :any]]]))))
-
-(def orgs-gen
-  (gen/let [org-names (mg/generator [:set {:min 1 :max 5} object-name])]
-    (apply gen/tuple
-           (map #(org-gen (gen/return %)) org-names))))
+            [matcher-combinators.test]
+            [ring.mock.request :as mock]))
 
 (defn org-repos-path [org-name]
   (str "/orgs/" org-name "/repos"))
@@ -82,25 +25,25 @@
             [:full_name :string]
             [:default_branch :string]]]]])
 
-(defn list-org-repos [org-name]
-  (request {:path (org-repos-path org-name)}))
+(defn list-org-repos-request [org-name]
+  (mock/request :get (org-repos-path org-name)))
 
 (defspec list-org-repos-respects-response-schema
-  10
   (prop/for-all
-   [org (org-gen)]
-   (with-handler {:orgs [org]}
-     (m/validate list-org-repos-response-schema
-                 (list-org-repos (:name org))))))
+   [{:keys [handler ent-db org0]} (mock-gen/database {:repo [[3]]})]
+   (m/validate list-org-repos-response-schema
+               (handler (list-org-repos-request (:org/name org0))))))
 
 (defspec list-org-repos-return-all-repos
-  10
   (prop/for-all
-   [orgs orgs-gen]
-   (with-handler {:orgs orgs}
-     (match? (set (mapcat #(->> % :repos (map (fn [{:keys [name]}]
-                                                {:full_name (string/join "/" [(:name %) name])}))) orgs))
-             (set (mapcat #(:body (list-org-repos (:name %))) orgs))))))
+   [{:keys [handler ent-db ents]} (mock-gen/database {:org [[:org1]
+                                                            [:org2]
+                                                            [:org3]]
+                                                      :repo [[2 {:refs {:repo/org :org1}}]
+                                                             [2 {:refs {:repo/org :org2}}]
+                                                             [2 {:refs {:repo/org :org3}}]]})]
+   (match? (set (map :repo/name (:repo ents)))
+           (set (map :name (mapcat #(:body (handler (list-org-repos-request (:org/name %)))) (:org ents)))))))
 
 (def create-org-repo-response-schema
   [:map
@@ -110,41 +53,30 @@
            [:full_name :string]
            [:default_branch :string]]]])
 
-(defn create-org-repo [org body]
-  (request {:path (org-repos-path org)
-            :method :post
-            :body body}))
+(defn create-org-repo-request [org body]
+  (-> (mock/request :post (org-repos-path org))
+      (assoc :body body)))
 
 (defspec create-org-repo-respects-response-schema
-  10
   (prop/for-all
-   [org-name object-name-gen
-    repo-name object-name-gen]
+   [{:keys [handler org0]} (mock-gen/database {:org [[1]]})
+    repo-name mock-gen/object-name]
    (m/validate
     create-org-repo-response-schema
-    (with-handler {:orgs [{:name org-name}]}
-      (create-org-repo org-name {:name repo-name})))))
+    (handler (create-org-repo-request (:org/name org0) {:name repo-name})))))
 
 (defspec create-org-repo-requires-a-name
-  10
   (prop/for-all
-   [org-name object-name-gen]
+   [{:keys [handler org0]} (mock-gen/database {:org [[1]]})]
    (match? {:status 422}
-           (with-handler {:orgs [{:name org-name}]}
-             (create-org-repo org-name {})))))
+           (handler (create-org-repo-request (:org/name org0) {})))))
 
 (defspec create-org-repo-adds-repo-to-the-org
-  10
   (prop/for-all
-   [[org repo-name] (gen/let [org (org-gen)
-                              repo-name (gen/such-that #(not ((->> org :repos (map :name) set) %)) object-name-gen)]
-                      [org repo-name])]
-   (with-handler {:orgs [org]}
-     (let [repos-before (set (:body (list-org-repos (:name org))))
-           _ (create-org-repo (:name org) {:name repo-name})
-           repos-after (set (:body (list-org-repos (:name org))))]
-       (match? #{{:full_name (string/join "/" [(:name org) repo-name])}}
-               (set/difference repos-after repos-before))))))
+   [{:keys [handler database org0]} (mock-gen/database {:org [[1]]})
+    repo-name mock-gen/object-name]
+   (handler (create-org-repo-request (:org/name org0) {:name repo-name}))
+   (database/find-repo database (:org/name org0) repo-name)))
 
 (def get-org-repo-response-schema
   [:map
@@ -157,81 +89,35 @@
 (defn org-repo-path [org-name repo-name]
   (string/join "/" ["/repos" org-name repo-name]))
 
-(defn get-org-repo [org-name repo-name]
-  (request {:path (org-repo-path org-name repo-name)}))
+(defn get-org-repo-request [org-name repo-name]
+  (mock/request :get (org-repo-path org-name repo-name)))
 
 (defspec get-org-repo-respects-response-schema
-  10
   (prop/for-all
-   [org-name object-name-gen
-    repo (repo-gen)]
+   [{:keys [handler org0 repo0]} (mock-gen/database {:repo [[1]]})]
    (m/validate
     get-org-repo-response-schema
-    (with-handler {:orgs [{:name org-name
-                           :repos [repo]}]}
-      (get-org-repo org-name (:name repo))))))
+    (handler (get-org-repo-request (:org/name org0) (:repo/name repo0))))))
 
-(defn update-org-repo [org-name repo-name body]
-  (request {:path (org-repo-path org-name repo-name)
-            :method :patch
-            :body body}))
+(defn update-org-repo-request [org-name repo-name body]
+  (-> (mock/request :patch (org-repo-path org-name repo-name))
+      (assoc :body body)))
 
 (defspec update-org-repo-respects-response-schema
-  10
   (prop/for-all
-   [org-name object-name-gen
-    repo (repo-gen)]
+   [{:keys [handler org0 repo0]} (mock-gen/database {:repo [[1]]})]
    (m/validate
     get-org-repo-response-schema
-    (with-handler {:orgs [{:name org-name
-                           :repos [repo]}]}
-      (update-org-repo org-name (:name repo) {:random-attr "random-value"})))))
+    (handler (update-org-repo-request (:org/name org0) (:repo/name repo0) {:random-attr "random-value"})))))
 
 (defspec update-org-repo-only-updates-set-fields
-  10
   (prop/for-all
-   [org-name object-name-gen
-    repo (repo-gen)]
-   (with-handler {:orgs [{:name org-name
-                          :repos [repo]}]}
-     (let [repo-before (:body (get-org-repo org-name (:name repo)))
-           _ (update-org-repo org-name (:name repo) {:visibility "private"})
-           repo-after (:body (get-org-repo org-name (:name repo)))]
-       (match? [nil {:visibility "private"} any?]
-               (data/diff repo-before repo-after))))))
-
-(defn flatten-obj [[obj-name node :as entry]]
-  (if (string? node)
-    entry
-    (into
-     {}
-     (map (fn [[child-name child-node]]
-            [(str obj-name "/" child-name) child-node])
-          (val entry)))))
-
-(defn tree->github-tree [tree]
-  (->> (walk/postwalk
-        (fn [node]
-          (if (map? node)
-            (into {} (map flatten-obj node))
-            node))
-        tree)
-       (map (fn [[path content]]
-              {:path path
-               :mode "100644"
-               :type "blob"
-               :content content}))))
-
-(def github-tree-gen
-  (gen/fmap
-   tree->github-tree
-   (mg/generator [:schema {:registry {::file-content :string
-                                      ::dir [:and
-                                             [:map-of object-name [:ref ::node]]
-                                             [:fn seq]]
-                                      ::node [:or ::file-content ::dir]
-                                      ::root ::dir}}
-                  ::root])))
+   [{:keys [handler org0 repo0]} (mock-gen/database {:repo [[1]]})]
+   (let [repo-before (:body (handler (get-org-repo-request (:org/name org0) (:repo/name repo0))))
+         _ (handler (update-org-repo-request (:org/name org0) (:repo/name repo0) {:visibility "private"}))
+         repo-after (:body (handler (get-org-repo-request (:org/name org0) (:repo/name repo0))))]
+     (match? [nil {:visibility "private"} any?]
+             (data/diff repo-before repo-after)))))
 
 (defn trees-path [org repo]
   (str "/repos/" org "/" repo "/git/trees"))
@@ -239,25 +125,20 @@
 (defn tree-sha-path [org repo tree-sha]
   (str (trees-path org repo) "/" tree-sha))
 
-(defn create-tree [org repo body]
-  (request {:path (trees-path org repo)
-            :method :post
-            :body body}))
+(defn create-tree-request [org repo body]
+  (->
+   (mock/request :post (trees-path org repo))
+   (assoc :body body)))
 
-(defn get-tree [org repo tree-sha]
-  (request {:path (tree-sha-path org repo tree-sha)}))
+(defn get-tree-request [org repo tree-sha]
+  (mock/request :get (tree-sha-path org repo tree-sha)))
 
 (defspec create-tree-adds-tree-to-repo
-  10
   (prop/for-all
-   [org-name object-name-gen
-    repo (repo-gen)
-    tree github-tree-gen]
-   (with-handler {:orgs [{:name org-name
-                          :repos [repo]}]}
-     (let [{{:keys [sha]} :body} (create-tree org-name (:name repo) {:tree tree})]
-       (= 200
-          (:status (get-tree org-name (:name repo) sha)))))))
+   [{:keys [handler database org0 repo0]} (mock-gen/database {:repo [[1]]})
+    tree mock-gen/github-tree]
+   (let [{{:keys [sha]} :body} (handler (create-tree-request (:org/name org0) (:repo/name repo0) {:tree tree}))]
+     (-> repo0 :repo/jgit (jgit/get-tree sha)))))
 
 (def get-tree-response-schema
   [:map
@@ -272,16 +153,12 @@
                     [:sha :string]]]]]]])
 
 (defspec get-tree-respects-response-schema
-  10
   (prop/for-all
-   [org-name object-name-gen
-    repo (repo-gen)
-    tree github-tree-gen]
-   (with-handler {:orgs [{:name org-name
-                          :repos [repo]}]}
-     (let [{{:keys [sha]} :body} (create-tree org-name (:name repo) {:tree tree})]
-       (m/validate get-tree-response-schema
-                   (get-tree org-name (:name repo) sha))))))
+   [{:keys [handler org0 repo0 tree]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
+                                                tree (mock-gen/tree (:repo/jgit repo0))]
+                                        (assoc database :tree tree))]
+   (m/validate get-tree-response-schema
+               (handler (get-tree-request (:org/name org0) (:repo/name repo0) (:sha tree))))))
 
 (defn commits-path [org repo]
   (str "/repos/" org "/" repo "/git/commits"))
@@ -289,27 +166,24 @@
 (defn commit-sha-path [org repo sha]
   (str (commits-path org repo) "/" sha))
 
-(defn create-commit [org repo body]
-  (request {:path (commits-path org repo)
-            :method :post
-            :body body}))
+(defn create-commit-request [org repo body]
+  (-> (mock/request :post (commits-path org repo))
+      (assoc :body body)))
 
-(defn get-commit [org repo sha]
-  (request {:path (commit-sha-path org repo sha)}))
+(defn get-commit-request [org repo sha]
+  (mock/request :get (commit-sha-path org repo sha)))
 
 (defspec create-commit-adds-commit-to-repo
-  10
   (prop/for-all
-   [org-name object-name-gen
-    repo (repo-gen)
-    tree github-tree-gen]
-   (with-handler {:orgs [{:name org-name
-                          :repos [repo]}]}
-     (let [{{tree-sha :sha} :body} (create-tree org-name (:name repo) {:tree tree})
-           {{:keys [sha]} :body} (create-commit org-name (:name repo) {:message "some message"
-                                                                       :tree tree-sha})]
-       (= 200
-          (:status (get-commit org-name (:name repo) sha)))))))
+   [{:keys [handler org0 repo0 tree]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
+                                                tree (mock-gen/tree (:repo/jgit repo0))]
+                                        (assoc database :tree tree))
+    message gen/string]
+   (let [{{:keys [sha]} :body} (handler (create-commit-request (:org/name org0)
+                                                               (:repo/name repo0)
+                                                               {:message message
+                                                                :tree (:sha tree)}))]
+     (-> repo0 :repo/jgit (jgit/get-commit sha)))))
 
 (def get-commit-response-schema
   [:map
@@ -321,18 +195,12 @@
            [:message :string]]]])
 
 (defspec get-commit-respects-response-schema
-  10
   (prop/for-all
-   [org-name object-name-gen
-    repo (repo-gen)
-    tree github-tree-gen]
-   (with-handler {:orgs [{:name org-name
-                          :repos [repo]}]}
-     (let [{{tree-sha :sha} :body} (create-tree org-name (:name repo) {:tree tree})
-           {{:keys [sha]} :body} (create-commit org-name (:name repo) {:message "some message"
-                                                                       :tree tree-sha})]
-       (m/validate get-commit-response-schema
-                   (get-commit org-name (:name repo) sha))))))
+   [{:keys [handler org0 repo0 commit]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
+                                                  commit (mock-gen/commit (:repo/jgit repo0))]
+                                          (assoc database :commit commit))]
+   (m/validate get-commit-response-schema
+               (handler (get-commit-request (:org/name org0) (:repo/name repo0) (:sha commit))))))
 
 (defn ref-path [org repo ref]
   (str "/repos/" org "/" repo "/git/ref/" ref))
@@ -343,173 +211,101 @@
 (defn refs-ref-path [org repo ref]
   (str (refs-path org repo) "/" ref))
 
-(defn create-ref [org repo body]
-  (request {:path (refs-path org repo)
-            :method :post
-            :body body}))
+(defn create-ref-request [org repo body]
+  (-> (mock/request :post (refs-path org repo))
+      (assoc :body body)))
 
-(defn get-ref [org repo ref]
-  (request {:path (ref-path org repo ref)}))
+(defn update-ref-request [org repo ref body]
+  (-> (mock/request :patch (refs-ref-path org repo ref))
+      (assoc :body body)))
 
-(defn update-ref [org repo ref body]
-  (request {:path (refs-ref-path org repo ref)
-            :method :patch
-            :body body}))
-
-(defn delete-ref [org repo ref]
-  (request {:path (refs-ref-path org repo ref)
-            :method :delete}))
+(defn delete-ref-request [org repo ref]
+  (mock/request :delete (refs-ref-path org repo ref)))
 
 (defspec create-ref-adds-ref-to-repo
-  10
   (prop/for-all
-   [org-name object-name-gen
-    repo (repo-gen)
-    tree github-tree-gen
-    ref (gen/not-empty gen/string-alphanumeric)]
-   (with-handler {:orgs [{:name org-name
-                          :repos [repo]}]}
-     (let [{{tree-sha :sha} :body} (create-tree org-name (:name repo) {:tree tree})
-           {{:keys [sha]} :body} (create-commit org-name (:name repo) {:message "some message"
-                                                                       :tree tree-sha})]
-       (create-ref org-name (:name repo) {:ref (str "refs/heads/" ref)
-                                          :sha sha})
-       (= 200
-          (:status (get-ref org-name (:name repo) (str "heads/" ref))))))))
+   [{:keys [handler org0 repo0 commit]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
+                                                  commit (mock-gen/commit (:repo/jgit repo0))]
+                                          (assoc database :commit commit))
+    ref (gen/fmap #(str "refs/heads/" %) mock-gen/object-name)]
+   (handler (create-ref-request (:org/name org0) (:repo/name repo0) {:ref ref
+                                                                     :sha (:sha commit)}))
+   (-> repo0 :repo/jgit (jgit/get-reference ref))))
 
 (defspec update-ref-updates-the-ref
-  10
   (prop/for-all
-   [org-name object-name-gen
-    repo (repo-gen)
-    ref (gen/not-empty gen/string-alphanumeric)]
-   (with-handler {:orgs [{:name org-name
-                          :repos [repo]}]}
-     (let [{{tree-sha :sha} :body} (create-tree org-name (:name repo) {:tree [{:path "a" :mode "100644" :type "blob" :content "a"}]})
-           {{:keys [sha]} :body} (create-commit org-name (:name repo) {:message "some message"
-                                                                       :tree tree-sha})]
-       (create-ref org-name (:name repo) {:ref (str "refs/heads/" ref)
-                                          :sha sha})
-       (let [{{tree-sha :sha} :body} (create-tree org-name (:name repo) {:base_tree tree-sha :tree [{:path "a" :mode "100644" :type "blob" :content "a1"}]})
-             {{:keys [sha]} :body} (create-commit org-name (:name repo) {:message "some message"
-                                                                         :tree tree-sha
-                                                                         :parents [sha]})]
-         (update-ref org-name (:name repo) (str "heads/" ref) {:sha sha})
-         (match? {:object {:sha sha}}
-                 (:body (get-ref org-name (:name repo) (str "heads/" ref)))))))))
+   [{:keys [handler org0 repo0 branch commit]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
+                                                         branch (mock-gen/branch (:repo/jgit repo0))
+                                                         commit (mock-gen/commit (:repo/jgit repo0) (-> branch :commit :sha))]
+                                                 (assoc database :branch branch :commit commit))]
+   (handler (update-ref-request (:org/name org0) (:repo/name repo0) (str "heads/" (:name branch)) {:sha (:sha commit)}))
+   (= (:sha commit) (-> repo0 :repo/jgit (jgit/get-reference (str "refs/heads/" (:name branch))) :object :sha))))
 
 (defspec delete-ref-removes-ref-from-repo
-  10
   (prop/for-all
-   [org-name object-name-gen
-    repo (repo-gen)
-    tree github-tree-gen
-    ref (gen/not-empty gen/string-alphanumeric)]
-   (with-handler {:orgs [{:name org-name
-                          :repos [repo]}]}
-     (let [{{tree-sha :sha} :body} (create-tree org-name (:name repo) {:tree tree})
-           {{:keys [sha]} :body} (create-commit org-name (:name repo) {:message "some message"
-                                                                       :tree tree-sha})]
-       (create-ref org-name (:name repo) {:ref (str "refs/heads/" ref)
-                                          :sha sha})
-       (delete-ref org-name (:name repo) (str "heads/" ref))
-       (= 404
-          (:status (get-ref org-name (:name repo) (str "heads/" ref))))))))
+   [{:keys [handler org0 repo0 branch]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
+                                                  branch (mock-gen/branch (:repo/jgit repo0))]
+                                          (assoc database :branch branch))]
+   (handler (delete-ref-request (:org/name org0) (:repo/name repo0) (str "heads/" (:name branch))))
+   (nil? (-> repo0 :repo/jgit (jgit/get-reference (str "refs/heads/" (:name branch)))))))
 
 (defn branch-path [org repo branch]
   (str "/repos/" org "/" repo "/branches/" branch))
 
-(defn get-branch [org repo branch]
-  (request {:path (branch-path org repo branch)}))
+(defn get-branch-request [org repo branch]
+  (mock/request :get (branch-path org repo branch)))
 
 (defspec get-branch-returns-branch-info
-  10
   (prop/for-all
-   [org-name object-name-gen
-    repo (repo-gen)
-    tree github-tree-gen
-    ref (gen/not-empty gen/string-alphanumeric)]
-   (with-handler {:orgs [{:name org-name
-                          :repos [repo]}]}
-     (let [{{tree-sha :sha} :body} (create-tree org-name (:name repo) {:tree tree})
-           {{:keys [sha]} :body} (create-commit org-name (:name repo) {:message "some message"
-                                                                       :tree tree-sha})]
-       (create-ref org-name (:name repo) {:ref (str "refs/heads/" ref)
-                                          :sha sha})
-       (match? {:status 200
-                :body {:name ref
-                       :commit {:sha sha
-                                :commit {:message "some message"
-                                         :tree {:sha tree-sha}}}}}
-               (get-branch org-name (:name repo) ref))))))
+   [{:keys [handler org0 repo0 branch]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
+                                                  branch (mock-gen/branch (:repo/jgit repo0))]
+                                          (assoc database :branch branch))]
+   (= {:status 200
+       :body branch}
+      (handler (get-branch-request (:org/name org0) (:repo/name repo0) (:name branch))))))
 
 (defn contents-path [org repo path]
   (str "/repos/" org "/" repo "/contents/" path))
 
-(defn get-content [org repo path ref]
-  (request {:path (contents-path org repo path)
-            :query-params {"ref" ref}}))
-
-(def github-tree+file-gen
-  (gen/let [tree github-tree-gen
-            file (gen/elements tree)]
-    {:tree tree
-     :file file}))
+(defn get-content-request
+  ([org repo path]
+   (mock/request :get (contents-path org repo path)))
+  ([org repo path ref]
+   (mock/request :get (contents-path org repo path) {"ref" ref})))
 
 (defspec get-content-returns-content
-  10
   (prop/for-all
-   [org-name object-name-gen
-    repo (repo-gen)
-    {:keys [tree file]} github-tree+file-gen]
-   (with-handler {:orgs [{:name org-name
-                          :repos [repo]}]}
-     (let [{{tree-sha :sha} :body} (create-tree org-name (:name repo) {:tree tree})
-           {{:keys [sha]} :body} (create-commit org-name (:name repo) {:message "some message"
-                                                                       :tree tree-sha})]
-       (create-ref org-name (:name repo) {:ref "refs/heads/main"
-                                          :sha sha})
-       (match? {:status 200
-                :body {:type "file"
-                       :path (:path file)
-                       :content (base64/encode (:content file) "UTF-8")}}
-               (get-content org-name (:name repo) (:path file) sha))))))
+   [{:keys [handler org0 repo0 branch file]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
+                                                       branch (mock-gen/branch (:repo/jgit repo0) :num-commits 1)
+                                                       file (mock-gen/random-file (:repo/jgit repo0) (:name branch))]
+                                               (assoc database :branch branch :file file))]
+   (= {:status 200
+       :body {:type "file"
+              :path (:path file)
+              :content (base64/encode (:content file) "UTF-8")}}
+      (handler (get-content-request (:org/name org0) (:repo/name repo0) (:path file) (-> branch :commit :sha))))))
 
 (defspec get-content-supports-refs
-  10
   (prop/for-all
-   [org-name object-name-gen
-    repo (repo-gen)
-    {:keys [tree file]} github-tree+file-gen]
-   (with-handler {:orgs [{:name org-name
-                          :repos [repo]}]}
-     (let [{{tree-sha :sha} :body} (create-tree org-name (:name repo) {:tree tree})
-           {{:keys [sha]} :body} (create-commit org-name (:name repo) {:message "some message"
-                                                                       :tree tree-sha})]
-       (create-ref org-name (:name repo) {:ref "refs/heads/main"
-                                          :sha sha})
-       (match? {:status 200
-                :body {:type "file"
-                       :path (:path file)
-                       :content (base64/encode (:content file) "UTF-8")}}
-               (get-content org-name (:name repo) (:path file) "main"))))))
+   [{:keys [handler org0 repo0 file branch]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
+                                                       branch (mock-gen/branch (:repo/jgit repo0) :num-commits 1)
+                                                       file (mock-gen/random-file (:repo/jgit repo0) (:name branch))]
+                                               (assoc database :branch branch :file file))]
+   (= {:status 200
+       :body {:type "file"
+              :path (:path file)
+              :content (base64/encode (:content file) "UTF-8")}}
+      (handler (get-content-request (:org/name org0) (:repo/name repo0) (:path file) (:name branch))))))
 
 (defspec get-content-supports-default-branch
-  10
   (prop/for-all
-   [org-name object-name-gen
-    repo (gen/fmap #(assoc % :default_branch "some-default-branch") (repo-gen))
-    {:keys [tree file]} github-tree+file-gen]
-   (with-handler {:orgs [{:name org-name
-                          :repos [repo]}]}
-     (let [{{tree-sha :sha} :body} (create-tree org-name (:name repo) {:tree tree})
-           {{:keys [sha]} :body} (create-commit org-name (:name repo) {:message "some message"
-                                                                       :tree tree-sha})]
-       (create-ref org-name (:name repo) {:ref "refs/heads/some-default-branch"
-                                          :sha sha})
-       (match? {:status 200
-                :body {:type "file"
-                       :path (:path file)
-                       :content (base64/encode (:content file) "UTF-8")}}
-               (request {:path (contents-path org-name (:name repo) (:path file))}))))))
-
+   [{:keys [handler org0 repo0 file]} (gen/let [branch-name mock-gen/object-name
+                                                {:keys [repo0] :as database} (mock-gen/database {:repo [[1 {:spec-gen {:repo/attrs {:default_branch branch-name}}}]]})
+                                                _ (mock-gen/branch (:repo/jgit repo0) :name branch-name :num-commits 1)
+                                                file (mock-gen/random-file (:repo/jgit repo0) branch-name)]
+                                        (assoc database :file file))]
+   (= {:status 200
+       :body {:type "file"
+              :path (:path file)
+              :content (base64/encode (:content file) "UTF-8")}}
+      (handler (get-content-request (:org/name org0) (:repo/name repo0) (:path file))))))
