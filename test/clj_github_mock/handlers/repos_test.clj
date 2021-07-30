@@ -321,7 +321,6 @@
       (assoc :body body)))
 
 (defspec create-pull-request-adds-to-database
-  1
   (prop/for-all
    [{:keys [handler database org0 repo0]} (mock-gen/database {:repo [[1]]})
     title gen/string]
@@ -330,3 +329,12 @@
       {:issue/attrs {:title title
                      :state "open"}}
       (database/find-pull database (:org/name org0) (:repo/name repo0) number)))))
+
+(defspec create-pull-request-increments-number
+  (prop/for-all
+   [{:keys [handler database org0 repo0 pull0]} (mock-gen/database {:pull [[1]]})
+    title gen/string]
+   (= (inc (:issue/number pull0))
+      (-> (handler (create-pull-request (:org/name org0) (:repo/name repo0) {:title title}))
+          :body
+          :number))))

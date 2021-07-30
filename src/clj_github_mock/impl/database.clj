@@ -11,7 +11,6 @@
   [{:repo/id (uuid)
     :repo/name repo-name
     :repo/org [:org/name org-name]
-    :repo/next-issue-number 1
     :repo/attrs (merge repo-defaults repo-attrs)
     :repo/jgit (jgit/empty-repo)}])
 
@@ -84,6 +83,19 @@
          [?p :issue/type :pull]
          [?p :issue/number ?pull-number]
          [?org :org/name ?org-name]] @database repo-id pull-number))
+
+(defn next-issue-number [database repo-id]
+  (inc
+   (ffirst (or (seq (d/q '[:find (max ?n)
+                           :in $ ?repo-id
+                           :where
+                           [?r :repo/id ?repo-id]
+                           [?i :issue/repo ?r]
+                           [?i :issue/number ?n]]
+                         @database repo-id))
+               [[0]]))))
+
+(or (seq #{}) [1])
 
 (defn transact [database datums]
   (d/transact database datums))

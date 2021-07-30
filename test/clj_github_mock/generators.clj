@@ -153,6 +153,12 @@
         {:keys [tree]} (jgit/get-flatten-tree repo (-> commit :tree :sha))]
     (gen/elements tree)))
 
+(defn- assoc-issue-number [state]
+  (fn [issue]
+    (let [issue-number (get @state (:issue/repo issue) 1)]
+      (swap! state update (:issue/repo issue) (constantly (inc issue-number)))
+      (assoc issue :issue/number issue-number))))
+
 (defn- schema []
   {:org {:prefix :org
          :malli-schema [:map
@@ -161,11 +167,18 @@
           :malli-schema [:map
                          [:repo/id :uuid]
                          [:repo/name [:string {:gen/gen (unique-object-name)}]]
-                         [:repo/next-issue-number [:= 1]]
                          [:repo/attrs [:map
                                        [:default_branch [:= "main"]]]]
                          [:repo/jgit [:any {:gen/fmap (fn [_] (jgit/empty-repo))}]]]
-          :relations {:repo/org [:org :org/name]}}})
+          :relations {:repo/org [:org :org/name]}}
+   :pull {:prefix :pull
+          :pre-insert-fn (assoc-issue-number (atom {}))
+          :malli-schema [:map
+                         [:issue/id :uuid]
+                         [:issue/type [:= :pull]]
+                         [:issue/attrs [:map
+                                        [:title :string]]]]
+          :relations {:issue/repo [:repo :repo/id]}}})
 
 (defn- malli-create-gen
   [ent-db]
@@ -192,6 +205,11 @@
    spec-gen
    (-> db :schema ent-type :relations)))
 
+(defn- pre-insert [db {:keys [ent-type]} datoms]
+  (if-let [pre-insert-fn (-> db :schema ent-type :pre-insert-fn)]
+    (pre-insert-fn datoms)
+    datoms))
+
 (def ^:private malli-gen [malli-gen-ent-val
                           sg/spec-gen-merge-overwrites
                           sg/spec-gen-assoc-relations])
@@ -202,10 +220,11 @@
       (sm/add-ents query)
       (sm/visit-ents-once :spec-gen malli-gen)))
 
-(defn- insert-datascript [database ent-db {:keys [spec-gen] :as ent-attrs}]
-  (let [datoms (assoc-ent-at-foreign-keys ent-db ent-attrs)]
+(defn- insert-datascript [database ent-db ent-attrs]
+  (let [datoms (->> (assoc-ent-at-foreign-keys ent-db ent-attrs)
+                    (pre-insert ent-db ent-attrs))]
     (d/transact! database [datoms])
-    spec-gen))
+    datoms))
 
 (defn- insert [database ent-db ent-attrs]
   (insert-datascript database ent-db ent-attrs))
