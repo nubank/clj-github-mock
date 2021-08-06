@@ -81,8 +81,7 @@
          [?r :repo/id ?repo-id]
          [?p :issue/repo ?r]
          [?p :issue/type :pull]
-         [?p :issue/number ?pull-number]
-         [?org :org/name ?org-name]] @database repo-id pull-number))
+         [?p :issue/number ?pull-number]] @database repo-id pull-number))
 
 (defn next-issue-number [database repo-id]
   (inc

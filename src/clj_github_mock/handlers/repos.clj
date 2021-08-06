@@ -134,6 +134,17 @@
   {:status 200
    :body (pull-body (database/find-pull-by-repo-id-number database repo-id (Integer/parseInt number)) org repo)})
 
+(defn merge-pull-handler [{database :database
+                           {jgit-repo :repo/jgit repo-id :repo/id} :repo
+                           {:keys [number]} :path-params}]
+  (let [pull (database/find-pull-by-repo-id-number database repo-id (Integer/parseInt number))
+        head (-> pull :issue/attrs :head)
+        base (-> pull :issue/attrs :base)]
+    {:status 200
+     :body (merge (jgit/merge jgit-repo head base)
+                  {:merged true
+                   :message "Pull Request succesfully merged"})}))
+
 (defn repo-middleware [handler]
   (fn [{database :database {:keys [org repo]} :path-params :as request}]
     (let [org (database/lookup database [:org/name org])
@@ -158,7 +169,9 @@
     ["/contents/*path" {:get get-content-handler}]
     ["/pulls"
      ["" {:post post-pull-handler}]
-     ["/:number" {:get get-pull-handler}]]]])
+     ["/:number"
+      ["" {:get get-pull-handler}]
+      ["/merge" {:put merge-pull-handler}]]]]])
 
 (defn handler [database]
   (-> (ring/ring-handler

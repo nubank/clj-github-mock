@@ -351,3 +351,17 @@
                    :repo {:name (:repo/name repo0)
                           :full_name (str (:org/name org0) "/" (:repo/name repo0))}}}
            (handler (get-pull-request-request (:org/name org0) (:repo/name repo0) (:issue/number pull0))))))
+
+(defn merge-pull-request-path [org repo pull-number]
+  (str (pull-path org repo pull-number) "/merge"))
+
+(defn merge-pull-request-request [org repo pull-number]
+  (mock/request :put (merge-pull-request-path org repo pull-number)))
+
+(defspec can-merge-pull-request
+  (prop/for-all
+   [{:keys [handler database org0 repo0 pull0]} (mock-gen/database {:pull [[1]]})]
+   (let [head-ref (str "refs/heads/" (-> pull0 :issue/attrs :head))
+         base-ref (str "refs/heads/" (-> pull0 :issue/attrs :base))]
+     (handler (merge-pull-request-request (:org/name org0) (:repo/name repo0) (:issue/number pull0)))
+     (jgit/merged-into? (:repo/jgit repo0) head-ref base-ref))))

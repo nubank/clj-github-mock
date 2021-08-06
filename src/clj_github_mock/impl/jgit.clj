@@ -4,8 +4,10 @@
             [clojure.string :as string])
   (:import [org.eclipse.jgit.internal.storage.dfs DfsRepositoryDescription InMemoryRepository]
            [org.eclipse.jgit.lib AnyObjectId CommitBuilder Constants FileMode ObjectId ObjectReader PersonIdent TreeFormatter]
-           [org.eclipse.jgit.revwalk RevCommit]
-           [org.eclipse.jgit.treewalk TreeWalk]))
+           [org.eclipse.jgit.revwalk RevWalk RevCommit]
+           [org.eclipse.jgit.revwalk.filter RevFilter]
+           [org.eclipse.jgit.treewalk TreeWalk]
+           [org.eclipse.jgit.merge MergeStrategy ThreeWayMergeStrategy]))
 
 (defn empty-repo []
   (InMemoryRepository. (DfsRepositoryDescription.)))
@@ -229,3 +231,34 @@
         {:type "file"
          :path path
          :content (base64/encode content "UTF-8")}))))
+
+(defn merge-base [repo sha1 sha2]
+  (let [rev-walk (RevWalk. repo)
+        commit1 (.parseCommit rev-walk (ObjectId/fromString sha1))
+        commit2 (.parseCommit rev-walk (ObjectId/fromString sha2))
+        _ (doto rev-walk
+            (.setRevFilter RevFilter/MERGE_BASE)
+            (.markStart commit1)
+            (.markStart commit2))
+        base (.next rev-walk)]
+    (when (and base (nil? (.next rev-walk)))
+      (-> base (.toObjectId) (ObjectId/toString)))))
+
+(defn merge [repo head base]
+  (let [head-commit (.resolve repo (str "refs/heads/" head))
+        base-commit (.resolve repo (str "refs/heads/" base))
+        merger (doto (.newMerger MergeStrategy/RECURSIVE repo true)
+                 (.setBase (.resolve repo (merge-base repo (ObjectId/toString head-commit) (ObjectId/toString base-commit)))))
+        _ (.merge merger (into-array AnyObjectId [base-commit head-commit]))
+        result-commit (create-commit! repo {:tree (ObjectId/toString (.getResultTreeId merger))
+                                            :message ""
+                                            :parents [(ObjectId/toString base-commit) (ObjectId/toString head-commit)]})
+        _ (create-reference! repo {:ref (str "refs/heads/" base)
+                                   :sha (:sha result-commit)})]
+    (get-branch repo base)))
+
+(defn merged-into? [repo ref base-ref]
+  (let [rev-walk (RevWalk. repo)
+        commit (.parseCommit rev-walk (.resolve repo ref))
+        base-commit (.parseCommit rev-walk (.resolve repo base-ref))]
+    (.isMergedInto rev-walk commit base-commit)))

@@ -138,7 +138,7 @@
   [repo & {:keys [name num-commits base-branch]}]
   (gen/let [branch-name (if name (gen/return name) object-name)
             num-commits (if num-commits (gen/return num-commits) (gen/fmap inc (gen/scale #(/ % 10) gen/nat)))
-            last-commit (commit-history repo (when base-branch (-> (jgit/get-branch repo base-branch) :commit :sha)) num-commits)]
+            last-commit (commit-history repo (when base-branch (-> (jgit/get-branch repo base-branch) :commit)) num-commits)]
     (jgit/create-reference! repo {:ref (str "refs/heads/" branch-name) :sha (:sha last-commit)})
     (jgit/get-branch repo branch-name)))
 
@@ -153,44 +153,46 @@
         {:keys [tree]} (jgit/get-flatten-tree repo (-> commit :tree :sha))]
     (gen/elements tree)))
 
-(defn- assoc-issue-number [state]
-  (fn [issue]
-    (let [issue-number (get @state (:issue/repo issue) 1)]
+(defn- call-gen [{{:keys [rnd-state size]} :gen-options} gen]
+  (let [[rnd1 rnd2] (random/split @rnd-state)]
+    (reset! rnd-state rnd2)
+    (rose/root (gen/call-gen gen rnd1 size))))
+
+(defn- pull-pre-insert-fn [state]
+  (fn [database ent-db _ issue]
+    (let [issue-number (get @state (:issue/repo issue) 1)
+          repo (-> (database/lookup database [:repo/id (-> issue :issue/repo :repo/id)]) :repo/jgit) 
+          base-branch (call-gen ent-db (branch repo))
+          head-branch (call-gen ent-db (branch repo :base-branch (:name base-branch)))]
       (swap! state update (:issue/repo issue) (constantly (inc issue-number)))
-      (assoc issue :issue/number issue-number))))
+      (-> (assoc issue :issue/number issue-number)
+          (update :issue/attrs assoc :base (:name base-branch) :head (:name head-branch))))))
 
 (defn- schema []
   {:org {:prefix :org
-         :malli-schema [:map
-                        [:org/name [:string {:gen/gen (unique-object-name)}]]]}
+         :gen (mg/generator [:map
+                             [:org/name [:string {:gen/gen (unique-object-name)}]]])}
    :repo {:prefix :repo
-          :malli-schema [:map
-                         [:repo/id :uuid]
-                         [:repo/name [:string {:gen/gen (unique-object-name)}]]
-                         [:repo/attrs [:map
-                                       [:default_branch [:= "main"]]]]
-                         [:repo/jgit [:any {:gen/fmap (fn [_] (jgit/empty-repo))}]]]
+          :gen (mg/generator [:map
+                              [:repo/id :uuid]
+                              [:repo/name [:string {:gen/gen (unique-object-name)}]]
+                              [:repo/attrs [:map
+                                            [:default_branch [:= "main"]]]]
+                              [:repo/jgit [:any {:gen/fmap (fn [_] (jgit/empty-repo))}]]])
           :relations {:repo/org [:org :org/name]}}
    :pull {:prefix :pull
-          :pre-insert-fn (assoc-issue-number (atom {}))
-          :malli-schema [:map
-                         [:issue/id :uuid]
-                         [:issue/type [:= :pull]]
-                         [:issue/attrs [:map
-                                        [:title :string]]]]
+          :pre-insert-fn (pull-pre-insert-fn (atom {}))
+          :gen (mg/generator [:map
+                              [:issue/id :uuid]
+                              [:issue/type [:= :pull]]
+                              [:issue/attrs [:map
+                                             [:title :string]]]])
           :relations {:issue/repo [:repo :repo/id]}}})
 
-(defn- malli-create-gen
-  [ent-db]
-  (update ent-db :schema #(map-vals (fn [{:keys [malli-schema] :as ent-spec}]
-                                      (assoc ent-spec :malli-gen (mg/generator malli-schema))) %)))
-
-(defn- malli-gen-ent-val
-  [{{:keys [rnd-state size]} :gen-options :as ent-db} {:keys [ent-name]}]
-  (let [{:keys [malli-gen]} (sm/ent-schema ent-db ent-name)
-        [rnd1 rnd2] (random/split @rnd-state)]
-    (reset! rnd-state rnd2)
-    (rose/root (gen/call-gen malli-gen rnd1 size))))
+(defn- gen-ent-val
+  [ent-db {:keys [ent-name]}]
+  (let [{:keys [gen]} (sm/ent-schema ent-db ent-name)]
+    (call-gen ent-db gen)))
 
 (defn- foreign-key-ent [[_ foreign-key-attr :as path] foreign-key-val]
   (cond
@@ -205,24 +207,24 @@
    spec-gen
    (-> db :schema ent-type :relations)))
 
-(defn- pre-insert [db {:keys [ent-type]} datoms]
+(defn- pre-insert [database db {:keys [ent-type] :as ent-attrs} datoms]
   (if-let [pre-insert-fn (-> db :schema ent-type :pre-insert-fn)]
-    (pre-insert-fn datoms)
+    (pre-insert-fn database db ent-attrs datoms)
     datoms))
 
-(def ^:private malli-gen [malli-gen-ent-val
+(def ^:private malli-gen [gen-ent-val
                           sg/spec-gen-merge-overwrites
                           sg/spec-gen-assoc-relations])
 
 (defn- ent-db-malli-gen
   [ent-db query]
-  (-> (malli-create-gen ent-db)
+  (-> ent-db
       (sm/add-ents query)
       (sm/visit-ents-once :spec-gen malli-gen)))
 
 (defn- insert-datascript [database ent-db ent-attrs]
   (let [datoms (->> (assoc-ent-at-foreign-keys ent-db ent-attrs)
-                    (pre-insert ent-db ent-attrs))]
+                    (pre-insert database ent-db ent-attrs))]
     (d/transact! database [datoms])
     datoms))
 
