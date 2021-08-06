@@ -138,7 +138,7 @@
   [repo & {:keys [name num-commits base-branch]}]
   (gen/let [branch-name (if name (gen/return name) object-name)
             num-commits (if num-commits (gen/return num-commits) (gen/fmap inc (gen/scale #(/ % 10) gen/nat)))
-            last-commit (commit-history repo (when base-branch (-> (jgit/get-branch repo base-branch) :commit :sha)) num-commits)]
+            last-commit (commit-history repo (when base-branch (-> (jgit/get-branch repo base-branch) :commit)) num-commits)]
     (jgit/create-reference! repo {:ref (str "refs/heads/" branch-name) :sha (:sha last-commit)})
     (jgit/get-branch repo branch-name)))
 
