@@ -139,9 +139,10 @@
                            {:keys [number]} :path-params}]
   (let [pull (database/find-pull-by-repo-id-number database repo-id (Integer/parseInt number))
         head (-> pull :issue/attrs :head)
-        base (-> pull :issue/attrs :base)]
+        base (-> pull :issue/attrs :base)
+        message (str "Merge pull request #" number " from " head)]
     {:status 200
-     :body (merge (jgit/merge jgit-repo head base)
+     :body (merge (jgit/merge jgit-repo head base message)
                   {:merged true
                    :message "Pull Request succesfully merged"})}))
 

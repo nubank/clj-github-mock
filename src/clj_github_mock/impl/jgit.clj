@@ -244,14 +244,14 @@
     (when (and base (nil? (.next rev-walk)))
       (-> base (.toObjectId) (ObjectId/toString)))))
 
-(defn merge [repo head base]
+(defn merge [repo head base message]
   (let [head-commit (.resolve repo (str "refs/heads/" head))
         base-commit (.resolve repo (str "refs/heads/" base))
         merger (doto (.newMerger MergeStrategy/RECURSIVE repo true)
                  (.setBase (.resolve repo (merge-base repo (ObjectId/toString head-commit) (ObjectId/toString base-commit)))))
         _ (.merge merger (into-array AnyObjectId [base-commit head-commit]))
         result-commit (create-commit! repo {:tree (ObjectId/toString (.getResultTreeId merger))
-                                            :message ""
+                                            :message message
                                             :parents [(ObjectId/toString base-commit) (ObjectId/toString head-commit)]})
         _ (create-reference! repo {:ref (str "refs/heads/" base)
                                    :sha (:sha result-commit)})]
