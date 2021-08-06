@@ -230,6 +230,7 @@
     (when object-id
       (let [content (String. (load-object reader object-id) "UTF-8")]
         {:type "file"
+         :sha (ObjectId/toString object-id)
          :path path
          :content (base64/encode content "UTF-8")}))))
 

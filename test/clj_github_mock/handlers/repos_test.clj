@@ -279,11 +279,11 @@
                                                        branch (mock-gen/branch (:repo/jgit repo0) :num-commits 1)
                                                        file (mock-gen/random-file (:repo/jgit repo0) (:name branch))]
                                                (assoc database :branch branch :file file))]
-   (= {:status 200
-       :body {:type "file"
-              :path (:path file)
-              :content (base64/encode (:content file) "UTF-8")}}
-      (handler (get-content-request (:org/name org0) (:repo/name repo0) (:path file) (-> branch :commit :sha))))))
+   (match? {:status 200
+            :body {:type "file"
+                   :path (:path file)
+                   :content (base64/encode (:content file) "UTF-8")}}
+           (handler (get-content-request (:org/name org0) (:repo/name repo0) (:path file) (-> branch :commit :sha))))))
 
 (defspec get-content-supports-refs
   (prop/for-all
@@ -291,11 +291,11 @@
                                                        branch (mock-gen/branch (:repo/jgit repo0) :num-commits 1)
                                                        file (mock-gen/random-file (:repo/jgit repo0) (:name branch))]
                                                (assoc database :branch branch :file file))]
-   (= {:status 200
-       :body {:type "file"
-              :path (:path file)
-              :content (base64/encode (:content file) "UTF-8")}}
-      (handler (get-content-request (:org/name org0) (:repo/name repo0) (:path file) (:name branch))))))
+   (match? {:status 200
+            :body {:type "file"
+                   :path (:path file)
+                   :content (base64/encode (:content file) "UTF-8")}}
+           (handler (get-content-request (:org/name org0) (:repo/name repo0) (:path file) (:name branch))))))
 
 (defn put-content-request
   [org repo path body]
@@ -303,6 +303,7 @@
       (assoc :body body)))
 
 (defspec put-content-creates-file-in-default-branch
+  1
   (prop/for-all
    [{:keys [handler org0 repo0]} (mock-gen/database {:repo [[1]]})
     path mock-gen/path
@@ -314,6 +315,7 @@
      (match? [{:status 201
                :body {:content {:type "file"
                                 :path path
+                                :sha (-> result :body :content :sha)
                                 :content new-content}
                       :commit {:message message}}}
               (-> result :body :content)]
