@@ -10,6 +10,9 @@
 (defn empty-repo []
   (InMemoryRepository. (DfsRepositoryDescription.)))
 
+(defn decode-base64 [s]
+  (if (string/blank? s) s (base64/decode s)))
+
 (defn- new-inserter [repo]
   (-> repo (.getObjectDatabase) (.newInserter)))
 
@@ -143,7 +146,7 @@
               (if (= "tree" type)
                 (flatten-tree repo sha (concat-path base-path path))
                 [(-> (merge tree-item (get-blob repo (:sha tree-item)))
-                     (update :content #(if (string/blank? %) % (base64/decode %)))
+                     (update :content decode-base64)
                      (update :path (partial concat-path base-path))
                      (dissoc :sha))]))
             tree)))
@@ -229,3 +232,12 @@
         {:type "file"
          :path path
          :content (base64/encode content "UTF-8")}))))
+
+(defn repo-with-empty-readme [main-branch]
+  (let [repo (empty-repo)
+        tree (create-tree! repo [{:path "README" :mode "100644" :content ""}])
+        commit (create-commit! repo {:message "Initial commit"
+                                     :tree (:sha tree)})]
+    (create-reference! repo {:ref (str "refs/heads/" main-branch)
+                             :sha (:sha commit)})
+    repo))

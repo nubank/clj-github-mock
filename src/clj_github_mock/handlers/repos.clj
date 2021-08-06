@@ -3,7 +3,8 @@
             [clj-github-mock.impl.jgit :as jgit]
             [clojure.string :as string]
             [reitit.ring :as ring]
-            [ring.middleware.params :as middleware.params]))
+            [ring.middleware.params :as middleware.params]
+            [base64-clj.core :as base64]))
 
 (defn repo-body [org-name {repo-name :repo/name attrs :repo/attrs}]
   (merge
@@ -113,6 +114,24 @@
        :body content}
       {:status 404})))
 
+(defn put-content-handler [{{git-repo :repo/jgit
+                             {:keys [default_branch]} :repo/attrs} :repo
+                            {:keys [path]} :path-params
+                            {:keys [content message]} :body}]
+  (let [branch (jgit/get-branch git-repo default_branch)
+        parent-commit (jgit/get-commit git-repo (-> branch :commit :sha))
+        _ (jgit/get-tree git-repo (-> parent-commit :tree :sha))
+        github-tree [{:type "blob" :path path :mode "100644" :content (jgit/decode-base64 content)}]
+        tree (jgit/create-tree! git-repo {:base_tree (-> parent-commit :tree :sha)
+                                          :tree github-tree})
+        commit (jgit/create-commit! git-repo {:tree (:sha tree)
+                                              :parents [(:sha parent-commit)]
+                                              :message message})]
+    (jgit/create-reference! git-repo {:ref (str "refs/heads/" (:name branch))
+                                      :sha (:sha commit)})
+    {:status 200
+     :body (jgit/get-content git-repo (:sha commit) path)}))
+
 (defn repo-middleware [handler]
   (fn [{database :database {:keys [org repo]} :path-params :as request}]
     (let [repo (database/find-repo database org repo)]
@@ -133,7 +152,8 @@
                        :delete delete-ref-handler}]
     ["/git/ref/*ref" {:get get-ref-handler}]
     ["/branches/:branch" {:get get-branch-handler}]
-    ["/contents/*path" {:get get-content-handler}]]])
+    ["/contents/*path" {:get get-content-handler
+                        :put put-content-handler}]]])
 
 (defn handler [database]
   (-> (ring/ring-handler

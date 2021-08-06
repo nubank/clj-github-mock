@@ -297,6 +297,25 @@
               :content (base64/encode (:content file) "UTF-8")}}
       (handler (get-content-request (:org/name org0) (:repo/name repo0) (:path file) (:name branch))))))
 
+(defn put-content-request
+  [org repo path body]
+  (-> (mock/request :put (contents-path org repo path))
+      (assoc :body body)))
+
+(defspec put-content-creates-file-in-default-branch
+  (prop/for-all
+   [{:keys [handler org0 repo0]} (mock-gen/database {:repo [[1]]})
+    path mock-gen/path
+    new-content (gen/fmap base64/encode mock-gen/blob)
+    message gen/string]
+   (handler (put-content-request (:org/name org0) (:repo/name repo0) path {:message message
+                                                                           :content new-content}))
+   (match? {:type "file"
+            :path path
+            :content new-content}
+           (let [repo (:repo/jgit repo0)]
+             (jgit/get-content repo (-> (jgit/get-branch repo "main") :commit :sha) path)))))
+
 (defspec get-content-supports-default-branch
   (prop/for-all
    [{:keys [handler org0 repo0 file]} (gen/let [branch-name mock-gen/object-name
@@ -309,3 +328,4 @@
               :path (:path file)
               :content (base64/encode (:content file) "UTF-8")}}
       (handler (get-content-request (:org/name org0) (:repo/name repo0) (:path file))))))
+

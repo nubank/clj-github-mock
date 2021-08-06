@@ -6,6 +6,7 @@
             [clojure.test.check.random :as random]
             [clojure.test.check.rose-tree :as rose]
             [clojure.walk :as walk]
+            [clojure.string :as string]
             [datascript.core :as d]
             [lambdaisland.regal.generator :as regal-gen]
             [malli.generator :as mg]
@@ -30,6 +31,9 @@
 (def blob
   "Generates a string that can be used as a blob content."
   gen/string-ascii)
+
+(def path
+  (gen/fmap (partial string/join "/") object-name))
 
 (defn- flatten-map-tree-entry [[obj-name node]]
   (if (:type node)
@@ -163,7 +167,7 @@
                          [:repo/name [:string {:gen/gen (unique-object-name)}]]
                          [:repo/attrs [:map
                                        [:default_branch [:= "main"]]]]
-                         [:repo/jgit [:any {:gen/fmap (fn [_] (jgit/empty-repo))}]]]
+                         [:repo/jgit [:any {:gen/fmap (fn [_] (jgit/repo-with-empty-readme "main"))}]]]
           :relations {:repo/org [:org :org/name]}}})
 
 (defn- malli-create-gen
