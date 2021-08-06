@@ -308,13 +308,16 @@
     path mock-gen/path
     new-content (gen/fmap base64/encode mock-gen/blob)
     message gen/string]
-   (handler (put-content-request (:org/name org0) (:repo/name repo0) path {:message message
-                                                                           :content new-content}))
-   (match? {:type "file"
-            :path path
-            :content new-content}
-           (let [repo (:repo/jgit repo0)]
-             (jgit/get-content repo (-> (jgit/get-branch repo "main") :commit :sha) path)))))
+   (let [jgit-repo (:repo/jgit repo0)
+         result (handler (put-content-request (:org/name org0) (:repo/name repo0) path {:message message
+                                                                                        :content new-content}))]
+     (match? [{:status 201
+               :body {:content {:type "file"
+                                :path path
+                                :content new-content}
+                      :commit {:message message}}}
+              (-> result :body :content)]
+             [result (jgit/get-content jgit-repo (-> (jgit/get-branch jgit-repo "main") :commit :sha) path)]))))
 
 (defspec get-content-supports-default-branch
   (prop/for-all

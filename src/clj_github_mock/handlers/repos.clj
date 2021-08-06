@@ -129,8 +129,9 @@
                                               :message message})]
     (jgit/create-reference! git-repo {:ref (str "refs/heads/" (:name branch))
                                       :sha (:sha commit)})
-    {:status 200
-     :body (jgit/get-content git-repo (:sha commit) path)}))
+    {:status 201
+     :body {:content (jgit/get-content git-repo (:sha commit) path)
+            :commit (jgit/get-commit git-repo (:sha commit))}}))
 
 (defn repo-middleware [handler]
   (fn [{database :database {:keys [org repo]} :path-params :as request}]
