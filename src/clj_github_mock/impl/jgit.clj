@@ -39,7 +39,8 @@
 
 (defn get-blob [repo sha]
   (let [content (String. (load-object (new-reader repo) (ObjectId/fromString sha)) "UTF-8")]
-    {:content (base64/encode content "UTF-8")}))
+    {:sha sha
+     :content (base64/encode content "UTF-8")}))
 
 (def ^:private github-mode->file-mode {"100644" FileMode/REGULAR_FILE
                                        "100755" FileMode/EXECUTABLE_FILE
@@ -236,7 +237,7 @@
 
 (defn repo-with-empty-readme [main-branch]
   (let [repo (empty-repo)
-        tree (create-tree! repo [{:path "README" :mode "100644" :content ""}])
+        tree (create-tree! repo {:tree [{:path "README" :type "blob" :mode "100644" :content ""}]})
         commit (create-commit! repo {:message "Initial commit"
                                      :tree (:sha tree)})]
     (create-reference! repo {:ref (str "refs/heads/" main-branch)

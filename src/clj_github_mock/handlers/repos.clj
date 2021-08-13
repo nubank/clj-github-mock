@@ -117,21 +117,27 @@
 (defn put-content-handler [{{git-repo :repo/jgit
                              {:keys [default_branch]} :repo/attrs} :repo
                             {:keys [path]} :path-params
-                            {:keys [content message]} :body}]
+                            {:keys [content message sha]} :body}]
   (let [branch (jgit/get-branch git-repo default_branch)
-        parent-commit (jgit/get-commit git-repo (-> branch :commit :sha))
-        _ (jgit/get-tree git-repo (-> parent-commit :tree :sha))
-        github-tree [{:type "blob" :path path :mode "100644" :content (jgit/decode-base64 content)}]
-        tree (jgit/create-tree! git-repo {:base_tree (-> parent-commit :tree :sha)
-                                          :tree github-tree})
-        commit (jgit/create-commit! git-repo {:tree (:sha tree)
-                                              :parents [(:sha parent-commit)]
-                                              :message message})]
-    (jgit/create-reference! git-repo {:ref (str "refs/heads/" (:name branch))
-                                      :sha (:sha commit)})
-    {:status 201
-     :body {:content (jgit/get-content git-repo (:sha commit) path)
-            :commit (jgit/get-commit git-repo (:sha commit))}}))
+        current-content (jgit/get-content git-repo (-> branch :commit :sha) path)
+        status (cond
+                 (not current-content) 201
+                 (= sha (:sha current-content)) 200
+                 :else 409)]
+    (if (= status 409)
+      {:status 409}
+      (let [parent-commit (jgit/get-commit git-repo (-> branch :commit :sha))
+            github-tree [{:type "blob" :path path :mode "100644" :content (jgit/decode-base64 content)}]
+            tree (jgit/create-tree! git-repo {:base_tree (-> parent-commit :tree :sha)
+                                              :tree github-tree})
+            commit (jgit/create-commit! git-repo {:tree (:sha tree)
+                                                  :parents [(:sha parent-commit)]
+                                                  :message message})]
+        (jgit/create-reference! git-repo {:ref (str "refs/heads/" (:name branch))
+                                          :sha (:sha commit)})
+        {:status status
+         :body {:content (jgit/get-content git-repo (:sha commit) path)
+                :commit (jgit/get-commit git-repo (:sha commit))}}))))
 
 (defn repo-middleware [handler]
   (fn [{database :database {:keys [org repo]} :path-params :as request}]

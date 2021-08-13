@@ -332,3 +332,40 @@
                       :commit {:message message}}}
               (-> result :body :content)]
              [result (jgit/get-content jgit-repo (-> (jgit/get-branch jgit-repo "main") :commit :sha) path)]))))
+
+(defspec put-content-updates-file
+  (prop/for-all
+   [{:keys [handler org0 repo0]} (mock-gen/database {:repo [[1]]})
+    new-content (gen/fmap base64/encode mock-gen/blob)
+    message gen/string]
+   (let [jgit-repo (:repo/jgit repo0)
+         branch (jgit/get-branch jgit-repo "main")
+         sha (:sha (jgit/get-content jgit-repo (-> branch :commit :sha) "README"))
+         new-sha (:sha (jgit/create-blob! jgit-repo {:content (jgit/decode-base64 new-content)}))
+         result (handler (put-content-request (:org/name org0) (:repo/name repo0) "README" {:message message
+                                                                                            :sha sha
+                                                                                            :content new-content}))]
+     (match? [{:status 200
+               :body {:content {:type "file"
+                                :path "README"
+                                :sha new-sha
+                                :content new-content}
+                      :commit {:message message}}}
+              (-> result :body :content)]
+             [result (jgit/get-content jgit-repo (-> (jgit/get-branch jgit-repo "main") :commit :sha) "README")]))))
+
+(defspec put-content-fails-if-given-outdated-sha
+  (prop/for-all
+   [{:keys [handler org0 repo0]} (mock-gen/database {:repo [[1]]})
+    new-content (gen/fmap base64/encode mock-gen/blob)
+    message gen/string]
+   (let [jgit-repo (:repo/jgit repo0)
+         branch (jgit/get-branch jgit-repo "main")
+         sha (:sha (jgit/get-content jgit-repo (-> branch :commit :sha) "README"))
+         _ (handler (put-content-request (:org/name org0) (:repo/name repo0) "README" {:message message
+                                                                                            :sha sha
+                                                                                              :content new-content}))
+         result (handler (put-content-request (:org/name org0) (:repo/name repo0) "README" {:message message
+                                                                                            :sha sha
+                                                                                            :content new-content}))]
+     (match? {:status 409} result))))

@@ -30,7 +30,7 @@
 
 (def blob
   "Generates a string that can be used as a blob content."
-  gen/string-ascii)
+  (gen/not-empty gen/string-ascii))
 
 (def path
   (gen/fmap (partial string/join "/") object-name))
