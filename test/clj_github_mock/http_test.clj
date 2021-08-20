@@ -1,9 +1,7 @@
 (ns clj-github-mock.http-test
   (:require [clj-github-mock.http :as http]
             [clj-github-mock.db :as db]
-            [clojure.test :refer [deftest is]]
-            [matcher-combinators.clj-test]
-            [matcher-combinators.matchers :as m]))
+            [clojure.test :refer [deftest is]]))
 
 (deftest routes-test
   (is (= [["/parent" {}]]
