@@ -3,7 +3,9 @@
             [clj-github-mock.impl.jgit :as jgit]
             [clojure.string :as string]
             [reitit.ring :as ring]
-            [ring.middleware.params :as middleware.params]))
+            [ring.middleware.params :as middleware.params]
+            [clj-github-mock.handlers :as handlers]
+            [clj-github-mock.db :as db]))
 
 (defn repo-body [org-name {repo-name :repo/name attrs :repo/attrs}]
   (merge
@@ -118,9 +120,9 @@
     (let [repo (database/find-repo database org repo)]
       (handler (assoc request :repo repo)))))
 
-(def routes
+(defn routes [meta-db]
   [["/orgs/:org/repos" {:get get-repos-handler
-                        :post post-repos-handler}]
+                        :post (handlers/post-handler meta-db :repo)}]
    ["/repos/:org/:repo" {:middleware [repo-middleware]}
     ["" {:get get-repo-handler
          :patch patch-repo-handler}]
@@ -135,9 +137,9 @@
     ["/branches/:branch" {:get get-branch-handler}]
     ["/contents/*path" {:get get-content-handler}]]])
 
-(defn handler [database]
+(defn handler [meta-db]
   (-> (ring/ring-handler
-       (ring/router routes)
+       (ring/router (routes meta-db))
        (ring/create-default-handler))
       (middleware.params/wrap-params)
-      (database/middleware database)))
+      (database/middleware (db/conn meta-db))))

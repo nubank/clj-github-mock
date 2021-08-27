@@ -12,7 +12,9 @@
             [malli.generator :as mg]
             [medley.core :refer [assoc-some map-keys map-vals]]
             [reifyhealth.specmonstah.core :as sm]
-            [reifyhealth.specmonstah.spec-gen :as sg]))
+            [reifyhealth.specmonstah.spec-gen :as sg]
+            [clj-github-mock.db :as db]
+            [clj-github-mock.api.repos :as api.repos]))
 
 (def object-name
   "Generates a name for objects like org names, repo names, branches, tags, etc."
@@ -160,7 +162,6 @@
                         [:org/name [:string {:gen/gen (unique-object-name)}]]]}
    :repo {:prefix :repo
           :malli-schema [:map
-                         [:repo/id :uuid]
                          [:repo/name [:string {:gen/gen (unique-object-name)}]]
                          [:repo/attrs [:map
                                        [:default_branch [:= "main"]]]]
@@ -235,7 +236,8 @@
   [query]
   (gen/->Generator
    (fn [rnd size]
-     (let [database (database/create {})
+     (let [meta-db (db/meta-db api.repos/model)
+           database (db/conn meta-db)
            ent-db (-> (ent-db-malli-gen {:schema (schema)
                                          :gen-options {:rnd-state (atom rnd)
                                                        :size size}}
@@ -243,7 +245,7 @@
                       (sm/visit-ents-once :inserted-data (partial insert database)))]
        (rose/pure
         (merge
-         {:handler (api/handler database)
+         {:handler (repos/handler meta-db)
           :database database
           :ent-db ent-db
           :ents (ents-attrs-map ent-db)}

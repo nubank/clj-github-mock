@@ -1,6 +1,8 @@
 (ns clj-github-mock.core
   (:require [clj-github-mock.handlers.repos :as repos]
             [clj-github-mock.impl.database :as database]
+            [clj-github-mock.db :as db]
+            [clj-github-mock.api.repos :as api.repos]
             [ring.middleware.json :as middleware.json]
             [ring.mock.request :as mock]))
 
@@ -21,7 +23,8 @@
   "
   [{:keys [initial-state] :as _opts}]
   (let [conn (database/create initial-state)]
-    (-> (repos/handler conn)
+    (-> (db/meta-db api.repos/model)
+        (repos/handler)
         (middleware.json/wrap-json-body {:keywords? true})
         (middleware.json/wrap-json-response))))
 

@@ -1,23 +1,29 @@
 (ns clj-github-mock.api.repos
-  (:require [clj-github-mock.handlers.repos :as repos]))
+  (:require [medley.core :as m]
+            [clj-github-mock.impl.jgit :as jgit]
+            [clojure.string :as string]))
+
+(def repo-defaults {:default_branch "main"})
 
 (def model
-  [{:api/name "org-repos"
-    :api/path "/orgs/:org/repos"
-    :api/routes [["" {:get repos/get-repos-handler
-                      :post repos/post-repos-handler}]]}
-   {:api/name "repos"
-    :api/path "/repos/:org/:repo"
-    :api/config {:middleware [repos/repo-middleware]}
-    :api/routes [["" {:get repos/get-repo-handler
-                      :patch repos/patch-repo-handler}]
-                 ["/git/trees" {:post repos/post-tree-handler}]
-                 ["/git/trees/:sha" {:get repos/get-tree-handler}]
-                 ["/git/commits" {:post repos/post-commit-handler}]
-                 ["/git/commits/:sha" {:get repos/get-commit-handler}]
-                 ["/git/refs" {:post repos/post-ref-handler}]
-                 ["/git/refs/*ref" {:patch repos/patch-ref-handler
-                                    :delete repos/delete-ref-handler}]
-                 ["/git/ref/*ref" {:get repos/get-ref-handler}]
-                 ["/branches/:branch" {:get repos/get-branch-handler}]
-                 ["/contents/*path" {:get repos/get-content-handler}]]}])
+  [{:entity/name :org
+    :entity/schema {:org/name {:db/unique :db.unique/identity}}}
+   {:entity/name :repo
+    :entity/schema {:repo/name+org {:db/tupleAttrs [:repo/name :repo/org]
+                                    :db/type :db.type/tuple
+                                    :db/unique :db.unique/identity}
+                    :repo/org {:db/type :db.type/ref}}
+    :entity/body-fn (fn [_ repo]
+                      (merge
+                       {:name (:repo/name repo)
+                        :full_name (string/join "/" [(-> repo :repo/org :org/name) (:repo/name repo)])}
+                       (:repo/attrs repo)))
+    :entity/post-schema [:map
+                         [:body [:map
+                                 [:name :string]]]]
+    :entity/post-fn (fn [_ {{:keys [org]} :path-params
+                            body :body}]
+                      {:repo/name (:name body)
+                       :repo/org [:org/name org]
+                       :repo/attrs (merge repo-defaults (m/remove-keys #{:name} body))
+                       :repo/jgit (jgit/empty-repo)})}])

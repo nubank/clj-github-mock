@@ -5,8 +5,7 @@
 (def repo-defaults {:default_branch "main"})
 
 (defn- repo-datums [org-name repo-name repo-attrs]
-  [{:repo/id (str (java.util.UUID/randomUUID))
-    :repo/name repo-name
+  [{:repo/name repo-name
     :repo/org [:org/name org-name]
     :repo/attrs (merge repo-defaults repo-attrs)
     :repo/jgit (jgit/empty-repo)}])
@@ -27,7 +26,8 @@
     conn))
 
 (defn upsert-repo [database org-name repo-name attrs]
-  (d/transact! database (repo-datums org-name repo-name attrs)))
+  (d/transact! database [{:repo/name+org [repo-name (d/entid @database [:org/name org-name])]
+                          :repo/attrs (merge repo-defaults attrs)}]))
 
 (defn find-repos [database org-name]
   (d/q

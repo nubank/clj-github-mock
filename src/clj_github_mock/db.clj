@@ -24,4 +24,4 @@
   (d/entity meta-db [:meta/meta :meta]))
 
 (defn conn [meta-db]
-  (:meta/conn #tap (meta-entity meta-db)))
+  (:meta/conn (meta-entity meta-db)))
