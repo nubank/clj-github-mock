@@ -29,4 +29,10 @@
                       {:repo/name (:name body)
                        :repo/org [:org/name org]
                        :repo/attrs (merge repo-defaults (m/remove-keys #{:name} body))
-                       :repo/jgit (jgit/empty-repo)})}])
+                       :repo/jgit (jgit/empty-repo)})
+    :entity/patch-fn (fn [db {{:keys [org repo]} :path-params
+                              body :body}]
+                       (let [key [repo (d/entid db [:org/name org])]]
+                         {:repo/name+org key
+                          :repo/attrs (merge (-> (d/entity db [:repo/name+org key]) :repo/attrs)
+                                             body)}))}])
