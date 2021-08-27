@@ -17,9 +17,9 @@
           (map api-routes (sort-by :db/id (:api/_parent api))))))
 
 (defn routes [db]
-  (map #(api-routes (d/entity db %)) 
-       (d/q '[:find [?a ...] 
-              :where
-              [?a :api/name _]
-              [(missing? $ ?a :api/parent)]]
-            db)))
+  (mapv #(api-routes (d/entity db %))
+        (d/q '[:find [?a ...]
+               :where
+               [?a :api/name _]
+               [(missing? $ ?a :api/parent)]]
+             db)))

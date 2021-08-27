@@ -2,6 +2,7 @@
   (:require [clj-github-mock.handlers.repos :as repos]
             [clj-github-mock.impl.database :as database]
             [clj-github-mock.impl.jgit :as jgit]
+            [clj-github-mock.api :as api]
             [clojure.test.check.generators :as gen]
             [clojure.test.check.random :as random]
             [clojure.test.check.rose-tree :as rose]
@@ -242,7 +243,7 @@
                       (sm/visit-ents-once :inserted-data (partial insert database)))]
        (rose/pure
         (merge
-         {:handler (repos/handler database)
+         {:handler (api/handler database)
           :database database
           :ent-db ent-db
           :ents (ents-attrs-map ent-db)}
