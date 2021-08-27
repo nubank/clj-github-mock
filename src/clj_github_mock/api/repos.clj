@@ -1,7 +1,8 @@
 (ns clj-github-mock.api.repos
   (:require [medley.core :as m]
             [clj-github-mock.impl.jgit :as jgit]
-            [clojure.string :as string]))
+            [clojure.string :as string]
+            [datascript.core :as d]))
 
 (def repo-defaults {:default_branch "main"})
 
@@ -13,7 +14,9 @@
                                     :db/type :db.type/tuple
                                     :db/unique :db.unique/identity}
                     :repo/org {:db/type :db.type/ref}}
-    :entity/body-fn (fn [_ repo]
+    :entity/lookup-fn (fn [db {{:keys [org repo]} :path-params}]
+                        [:repo/name+org [repo (d/entid db [:org/name org])]])
+    :entity/body-fn (fn [_ _ repo]
                       (merge
                        {:name (:repo/name repo)
                         :full_name (string/join "/" [(-> repo :repo/org :org/name) (:repo/name repo)])}

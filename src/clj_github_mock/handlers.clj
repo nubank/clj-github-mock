@@ -9,7 +9,7 @@
     (let [conn (db/conn meta-db) 
           entity (d/entity meta-db [:entity/name ent-name])
           post-schema (or (:entity/post-schema entity) :any)
-          error #tap (-> (m/explain post-schema request)
+          error (-> (m/explain post-schema request)
                             (me/humanize))]
       (if-not error
         (let [post-fn (:entity/post-fn entity)
@@ -18,7 +18,20 @@
                                                                                               (post-fn % request)
                                                                                               {:db/id "eid"}))]])]
           {:status 201
-           :body (body-fn meta-db (d/entity db eid))})
+           :body (body-fn meta-db db (d/entity db eid))})
         (merge 
          {:status 422}
          error)))))
+
+(defn get-handler [meta-db ent-name]
+  (fn [request]
+    (let [conn (db/conn meta-db)
+          entity (d/entity meta-db [:entity/name ent-name])
+          db @conn
+          lookup-fn (:entity/lookup-fn entity)
+          object (d/entity db (lookup-fn db request))
+          body-fn (:entity/body-fn entity)]
+      (if object
+        {:status 200
+         :body (body-fn meta-db db object)}
+        {:status 404}))))

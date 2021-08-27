@@ -124,7 +124,7 @@
   [["/orgs/:org/repos" {:get get-repos-handler
                         :post (handlers/post-handler meta-db :repo)}]
    ["/repos/:org/:repo" {:middleware [repo-middleware]}
-    ["" {:get get-repo-handler
+    ["" {:get (handlers/get-handler meta-db :repo)
          :patch patch-repo-handler}]
     ["/git/trees" {:post post-tree-handler}]
     ["/git/trees/:sha" {:get get-tree-handler}]
