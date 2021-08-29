@@ -172,7 +172,12 @@
    :commit {:prefix :commit
             :malli-schema [:map
                            [:commit/sha [:string {:gen/gen (gen/fmap :sha (commit jgit-repo))}]]]
-            :relations {:commit/repo [:repo :repo/name+org]}}})
+            :relations {:commit/repo [:repo :repo/name+org]}}
+   :branch {:prefix :branch
+            :malli-schema [:map
+                           [:ref/ref [:string {:gen/gen (gen/fmap #(str "refs/heads/" %) (unique-object-name))}]
+                            :ref/sha [:string {:gen/gen (gen/fmap (comp :sha :commit) (branch  jgit-repo))}]]]
+            :relations {:ref/repo [:repo :repo/name+org]}}})
 
 (defn- malli-create-gen
   [ent-db]
@@ -253,6 +258,7 @@
         (merge
          {:handler (repos/handler meta-db)
           :database database
+          :meta-db meta-db
           :ent-db ent-db
           :ents (ents-attrs-map ent-db)}
          (ent-attrs-map ent-db)))))))

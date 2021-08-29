@@ -54,6 +54,7 @@
                                   [:tree :string]
                                   [:parents {:optional true} [:vector :string]]]]]})
 
+; TODO enforce update using jgit
 (def ref-resource
   {:resource/name :ref
    :resource/db-schema {:ref/repo+ref {:db/tupleAttrs [:ref/repo :ref/ref]
@@ -63,7 +64,7 @@
                        {:ref (:ref/ref ref)
                         :object {:type :commit
                                  :sha (:ref/sha ref)}})
-   :resource/lookup-fn (fn [db {:keys [org repo ref]}]
+   :resource/lookup-fn (fn [db {{:keys [org repo ref]} :path-params}]
                          [:ref/repo+ref [(d/entid db [:repo/name+org [repo (d/entid db [:org/name org])]]) (str "refs/" ref)]])
    :resource/post-fn (fn [db {{:keys [org repo]} :path-params
                               body :body}]
@@ -76,4 +77,15 @@
                                          [:repo :string]]]
                           [:body [:map
                                   [:ref :string]
-                                  [:sha :string]]]]})
+                                  [:sha :string]]]]
+   :resource/patch-fn (fn [db {{:keys [org repo ref]} :path-params
+                               body :body}]
+                        {:ref/repo+ref [(d/entid db [:repo/name+org [repo (d/entid db [:org/name org])]]) (str "refs/" ref)]
+                         :ref/sha (:sha body)})
+   :resource/patch-schema [:map
+                           [:path-params [:map
+                                          [:org :string]
+                                          [:repo :string]
+                                          [:ref :string]]]
+                           [:body [:map
+                                   [:sha :string]]]]})

@@ -12,7 +12,8 @@
             [matcher-combinators.standalone :refer [match?]]
             [matcher-combinators.test]
             [ring.mock.request :as mock]
-            [datascript.core :as d]))
+            [datascript.core :as d]
+            [clj-github-mock.db :as db]))
 
 (defn org-repos-path [org-name]
   (str "/orgs/" org-name "/repos"))
@@ -238,12 +239,14 @@
 
 (defspec update-ref-updates-the-ref
   (prop/for-all
-   [{:keys [handler org0 repo0 branch commit]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
-                                                         branch (mock-gen/branch (:repo/jgit repo0))
-                                                         commit (mock-gen/commit (:repo/jgit repo0) (-> branch :commit :sha))]
-                                                 (assoc database :branch branch :commit commit))]
-   (handler (update-ref-request (:org/name org0) (:repo/name repo0) (str "heads/" (:name branch)) {:sha (:sha commit)}))
-   (= (:sha commit) (-> repo0 :repo/jgit (jgit/get-reference (str "refs/heads/" (:name branch))) :object :sha))))
+   [{:keys [handler database org0 repo0 branch0 commit]} (gen/let [{:keys [branch0 meta-db] :as database} (mock-gen/database {:branch [[1]]})
+                                                         commit (mock-gen/commit (db/jgit-repo meta-db) (-> branch0 :ref/sha))]
+                                                 (assoc database :commit commit))]
+   (handler (update-ref-request (:org/name org0) (:repo/name repo0) (string/replace (:ref/ref branch0) #"refs/" "") {:sha (:sha commit)}))
+   (let [db @database]
+     (= (:sha commit) (:ref/sha (d/entity db [:ref/repo+ref [(d/entid db [:repo/name+org [(:repo/name repo0)
+                                                               (d/entid db [:org/name (:org/name org0)])]])
+                                  (:ref/ref branch0)]]))))))
 
 (defspec delete-ref-removes-ref-from-repo
   (prop/for-all

@@ -131,7 +131,7 @@
     ["/git/commits" {:post (handlers/post-handler meta-db :commit)}]
     ["/git/commits/:sha" {:get (handlers/get-handler meta-db :commit)}]
     ["/git/refs" {:post (handlers/post-handler meta-db :ref)}]
-    ["/git/refs/*ref" {:patch patch-ref-handler
+    ["/git/refs/*ref" {:patch (handlers/patch-handler meta-db :ref)
                        :delete delete-ref-handler}]
     ["/git/ref/*ref" {:get (handlers/get-handler meta-db :ref)}]
     ["/branches/:branch" {:get get-branch-handler}]
