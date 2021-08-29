@@ -18,6 +18,9 @@
                        {:tree/repo [:repo/name+org [repo (d/entid db [:org/name org])]]
                         :tree/sha (:sha (jgit/create-tree! (db/jgit-repo meta-db) body))})
    :resource/post-schema [:map
+                          [:path-params [:map
+                                         [:org :string]
+                                         [:repo :string]]]
                           [:body [:map
                                   [:tree [:vector
                                           [:map
@@ -27,3 +30,26 @@
                                            [:sha {:optional true} :string]
                                            [:content {:optional true} :string]]]]
                                   [:base_tree {:optional true} :string]]]]})
+
+(def commit-resource
+  {:resource/name :commit
+   :resource/db-schema {:commit/repo+sha {:db/tupleAttrs [:commit/repo :commit/sha]
+                                          :db/unique :db.unique/identity}
+                        :commit/repo {:db/type :db.type/ref}}
+   :resource/body-fn (fn [meta-db _ commit]
+                       (jgit/get-commit (db/jgit-repo meta-db) (:commit/sha commit)))
+   :resource/lookup-fn (fn [db {{:keys [org repo sha]} :path-params}]
+                         [:commit/repo+sha [(d/entid db [:repo/name+org [repo (d/entid db [:org/name org])]]) sha]])
+   :resource/post-fn (fn [db {{:keys [org repo]} :path-params
+                              meta-db :meta-db
+                              body :body}]
+                       {:commit/repo [:repo/name+org [repo (d/entid db [:org/name org])]]
+                        :commit/sha (:sha (jgit/create-commit! (db/jgit-repo meta-db) body))})
+   :resource/post-schema [:map
+                          [:path-params [:map
+                                         [:org :string]
+                                         [:repo :string]]]
+                          [:body [:map
+                                  [:message :string]
+                                  [:tree :string]
+                                  [:parents {:optional true} [:vector :string]]]]]})

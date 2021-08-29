@@ -177,15 +177,18 @@
 
 (defspec create-commit-adds-commit-to-repo
   (prop/for-all
-   [{:keys [handler org0 repo0 tree]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
+   [{:keys [handler database org0 repo0 tree]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
                                                 tree (mock-gen/tree (:repo/jgit repo0))]
                                         (assoc database :tree tree))
     message gen/string]
    (let [{{:keys [sha]} :body} (handler (create-commit-request (:org/name org0)
                                                                (:repo/name repo0)
                                                                {:message message
-                                                                :tree (:sha tree)}))]
-     (-> repo0 :repo/jgit (jgit/get-commit sha)))))
+                                                                :tree (:sha tree)}))
+         db @database]
+     (d/entid db [:commit/repo+sha [(d/entid db [:repo/name+org [(:repo/name repo0)
+                                                               (d/entid db [:org/name (:org/name org0)])]])
+                                  sha]]))))
 
 (def get-commit-response-schema
   [:map
@@ -198,11 +201,9 @@
 
 (defspec get-commit-respects-response-schema
   (prop/for-all
-   [{:keys [handler org0 repo0 commit]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
-                                                  commit (mock-gen/commit (:repo/jgit repo0))]
-                                          (assoc database :commit commit))]
+   [{:keys [handler org0 repo0 commit0]} (mock-gen/database {:commit [[1]]})]
    (m/validate get-commit-response-schema
-               (handler (get-commit-request (:org/name org0) (:repo/name repo0) (:sha commit))))))
+               (handler (get-commit-request (:org/name org0) (:repo/name repo0) (:commit/sha commit0))))))
 
 (defn ref-path [org repo ref]
   (str "/repos/" org "/" repo "/git/ref/" ref))

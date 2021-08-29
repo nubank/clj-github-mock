@@ -128,8 +128,8 @@
          :patch (handlers/patch-handler meta-db :repo)}]
     ["/git/trees" {:post (handlers/post-handler meta-db :tree)}]
     ["/git/trees/:sha" {:get (handlers/get-handler meta-db :tree)}]
-    ["/git/commits" {:post post-commit-handler}]
-    ["/git/commits/:sha" {:get get-commit-handler}]
+    ["/git/commits" {:post (handlers/post-handler meta-db :commit)}]
+    ["/git/commits/:sha" {:get (handlers/get-handler meta-db :commit)}]
     ["/git/refs" {:post post-ref-handler}]
     ["/git/refs/*ref" {:patch patch-ref-handler
                        :delete delete-ref-handler}]

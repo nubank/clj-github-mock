@@ -8,5 +8,6 @@
   (db/meta-db
    [org/resource
     repo/resource
-    database/tree-resource]))
+    database/tree-resource
+    database/commit-resource]))
 

@@ -168,7 +168,11 @@
    :tree {:prefix :tree
           :malli-schema [:map
                          [:tree/sha [:string {:gen/gen (gen/fmap :sha (tree jgit-repo))}]]]
-          :relations {:tree/repo [:repo :repo/name+org]}}})
+          :relations {:tree/repo [:repo :repo/name+org]}}
+   :commit {:prefix :commit
+            :malli-schema [:map
+                           [:commit/sha [:string {:gen/gen (gen/fmap :sha (commit jgit-repo))}]]]
+            :relations {:commit/repo [:repo :repo/name+org]}}})
 
 (defn- malli-create-gen
   [ent-db]
