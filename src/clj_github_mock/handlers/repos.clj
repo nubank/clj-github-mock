@@ -132,7 +132,7 @@
     ["/git/commits/:sha" {:get (handlers/get-handler meta-db :commit)}]
     ["/git/refs" {:post (handlers/post-handler meta-db :ref)}]
     ["/git/refs/*ref" {:patch (handlers/patch-handler meta-db :ref)
-                       :delete delete-ref-handler}]
+                       :delete (handlers/delete-handler meta-db :ref)}]
     ["/git/ref/*ref" {:get (handlers/get-handler meta-db :ref)}]
     ["/branches/:branch" {:get get-branch-handler}]
     ["/contents/*path" {:get get-content-handler}]]])

@@ -2,7 +2,6 @@
   (:require [base64-clj.core :as base64]
             [clj-github-mock.generators :as mock-gen]
             [clj-github-mock.impl.database :as database]
-            [clj-github-mock.impl.jgit :as jgit]
             [clojure.data :as data]
             [clojure.string :as string]
             [clojure.test.check.clojure-test :refer [defspec]]
@@ -250,11 +249,12 @@
 
 (defspec delete-ref-removes-ref-from-repo
   (prop/for-all
-   [{:keys [handler org0 repo0 branch]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
-                                                  branch (mock-gen/branch (:repo/jgit repo0))]
-                                          (assoc database :branch branch))]
-   (handler (delete-ref-request (:org/name org0) (:repo/name repo0) (str "heads/" (:name branch))))
-   (nil? (-> repo0 :repo/jgit (jgit/get-reference (str "refs/heads/" (:name branch)))))))
+   [{:keys [handler database org0 repo0 branch0]} (mock-gen/database {:branch [[1]]})]
+   (handler (delete-ref-request (:org/name org0) (:repo/name repo0) (string/replace (:ref/ref branch0) #"refs/" "")))
+   (let [db @database]
+     (nil? (d/entid db [:ref/repo+ref [(d/entid db [:repo/name+org [(:repo/name repo0)
+                                                               (d/entid db [:org/name (:org/name org0)])]])
+                                  (:ref/ref branch0)]])))))
 
 (defn branch-path [org repo branch]
   (str "/repos/" org "/" repo "/branches/" branch))

@@ -63,3 +63,11 @@
           results (mapv #(body-fn meta-db db %) objects)]
       {:status 200
        :body results})))
+
+(defn delete-handler [meta-db resource-name]
+  (fn [request]
+    (let [conn (db/conn meta-db)
+          db @conn
+          lookup-fn (db/lookup-fn meta-db resource-name)]
+      (d/transact! conn [[:db.fn/retractEntity (lookup-fn db request)]])
+      {:status 204})))

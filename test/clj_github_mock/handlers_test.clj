@@ -104,3 +104,14 @@
               :body [{:name "repo1"}
                      {:name "repo2"}]}
              (handler {}))))))
+
+(deftest delete-handler-test
+  (let [meta-db (db/meta-db [{:resource/name :repo
+                              :resource/db-schema {:repo/name {:db/unique :db.unique/identity}}
+                              :resource/lookup-fn (fn [_ {{:keys [repo]} :path-params}]
+                                                    [:repo/name repo])}])
+        _ (d/transact! (db/conn meta-db) [{:repo/name "repo"}])
+        handler (handlers/delete-handler meta-db :repo)]
+    (testing "deletes entity"
+      (is (= {:status 204}
+             (handler {:path-params {:repo "repo"}}))))))
