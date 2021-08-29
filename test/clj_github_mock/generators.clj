@@ -1,7 +1,7 @@
 (ns clj-github-mock.generators
   (:require [clj-github-mock.handlers.repos :as repos]
             [clj-github-mock.impl.jgit :as jgit]
-            [clj-github-mock.resource :as api]
+            [clj-github-mock.resource :as resource]
             [clojure.test.check.generators :as gen]
             [clojure.test.check.random :as random]
             [clojure.test.check.rose-tree :as rose]
@@ -234,7 +234,7 @@
   [query]
   (gen/->Generator
    (fn [rnd size]
-     (let [meta-db (api/meta-db {})
+     (let [meta-db (resource/meta-db {})
            database (db/conn meta-db)
            ent-db (-> (ent-db-malli-gen {:schema (schema)
                                          :gen-options {:rnd-state (atom rnd)
