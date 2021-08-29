@@ -264,12 +264,10 @@
 
 (defspec get-branch-returns-branch-info
   (prop/for-all
-   [{:keys [handler org0 repo0 branch]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
-                                                  branch (mock-gen/branch (:repo/jgit repo0))]
-                                          (assoc database :branch branch))]
-   (= {:status 200
-       :body branch}
-      (handler (get-branch-request (:org/name org0) (:repo/name repo0) (:name branch))))))
+   [{:keys [handler org0 repo0 branch0]} (mock-gen/database {:branch [[1]]})]
+   (match? {:status 200
+            :body {:name (string/replace (:ref/ref branch0) #"refs/heads/" "")}}
+           (handler (get-branch-request (:org/name org0) (:repo/name repo0) (string/replace (:ref/ref branch0) #"refs/heads/" ""))))))
 
 (defn contents-path [org repo path]
   (str "/repos/" org "/" repo "/contents/" path))

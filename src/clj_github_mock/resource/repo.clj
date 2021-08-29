@@ -1,7 +1,8 @@
 (ns clj-github-mock.resource.repo
   (:require [medley.core :as m]
             [clojure.string :as string]
-            [datascript.core :as d]))
+            [datascript.core :as d]
+            [clj-github-mock.db :as db]))
 
 (def repo-defaults {:default_branch "main"})
 
@@ -39,3 +40,12 @@
                                    [?o :org/name ?org]
                                    [?r :repo/org ?o]] db org)
                             (map #(d/entity db %))))})
+
+; TODO complete commit object
+(def branch-resource
+  {:resource/name :branch
+   :resource/lookup-fn (fn [db {{:keys [org repo branch]} :path-params}]
+                         [:ref/repo+ref [(d/entid db [:repo/name+org [repo (d/entid db [:org/name org])]]) (str "refs/heads/" branch)]])
+   :resource/body-fn (fn [meta-db db branch]
+                       {:name (string/replace (:ref/ref branch) "refs/heads/" "")
+                        :commit {:sha (:ref/sha branch)}})})

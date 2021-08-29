@@ -134,7 +134,7 @@
     ["/git/refs/*ref" {:patch (handlers/patch-handler meta-db :ref)
                        :delete (handlers/delete-handler meta-db :ref)}]
     ["/git/ref/*ref" {:get (handlers/get-handler meta-db :ref)}]
-    ["/branches/:branch" {:get get-branch-handler}]
+    ["/branches/:branch" {:get (handlers/get-handler meta-db :branch)}]
     ["/contents/*path" {:get get-content-handler}]]])
 
 (defn meta-db-middleware [handler meta-db]

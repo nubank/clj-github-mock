@@ -7,8 +7,9 @@
 (defn meta-db [_initial_state]
   (db/meta-db
    [org/resource
-    repo/resource
     database/tree-resource
     database/commit-resource
-    database/ref-resource]))
+    database/ref-resource
+    repo/resource
+    repo/branch-resource]))
 
