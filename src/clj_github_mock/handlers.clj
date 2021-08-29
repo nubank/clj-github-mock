@@ -4,16 +4,15 @@
             [malli.core :as m]
             [malli.error :as me]))
 
-(defn post-handler [meta-db ent-name]
+(defn post-handler [meta-db resource-name]
   (fn [request]
     (let [conn (db/conn meta-db)
-          entity (d/entity meta-db [:entity/name ent-name])
-          post-schema (or (:entity/post-schema entity) :any)
+          post-schema (or (db/post-schema meta-db resource-name) :any)
           error (-> (m/explain post-schema request)
                     (me/humanize))]
       (if-not error
-        (let [post-fn (:entity/post-fn entity)
-              body-fn (:entity/body-fn entity)
+        (let [post-fn (db/post-fn meta-db resource-name)
+              body-fn (db/body-fn meta-db resource-name) 
               {{:strs [eid]} :tempids db :db-after} (d/transact! conn [[:db.fn/call #(vector (merge
                                                                                               (post-fn % request)
                                                                                               {:db/id "eid"}))]])]
@@ -22,32 +21,30 @@
         {:status 422
          :body error}))))
 
-(defn get-handler [meta-db ent-name]
+(defn get-handler [meta-db resource-name]
   (fn [request]
     (let [conn (db/conn meta-db)
-          entity (d/entity meta-db [:entity/name ent-name])
           db @conn
-          lookup-fn (:entity/lookup-fn entity)
+          lookup-fn (db/lookup-fn meta-db resource-name)
           object (d/entity db (lookup-fn db request))
-          body-fn (:entity/body-fn entity)]
+          body-fn (db/body-fn meta-db resource-name)]
       (if object
         {:status 200
          :body (body-fn meta-db db object)}
         {:status 404}))))
 
-(defn patch-handler [meta-db ent-name]
+(defn patch-handler [meta-db resource-name]
   (fn [request]
     (let [conn (db/conn meta-db)
-          entity (d/entity meta-db [:entity/name ent-name])
-          lookup-fn (:entity/lookup-fn entity)
+          lookup-fn (db/lookup-fn meta-db resource-name)
           db @conn]
       (if (d/entid db (lookup-fn db request))
-        (let [patch-schema (or (:entity/patch-schema entity) :any)
+        (let [patch-schema (or (db/patch-schema meta-db resource-name) :any)
               error (-> (m/explain patch-schema request)
                         (me/humanize))]
           (if-not error
-            (let [patch-fn (:entity/patch-fn entity)
-                  body-fn (:entity/body-fn entity)
+            (let [patch-fn (db/patch-fn meta-db resource-name)
+                  body-fn (db/body-fn meta-db resource-name)
                   {{:strs [eid]} :tempids db-after :db-after} (d/transact! conn [[:db.fn/call #(vector (merge (patch-fn % request)
                                                                                                               {:db/id "eid"}))]])]
               {:status 200
@@ -56,13 +53,12 @@
              :body error}))
         {:status 404}))))
 
-(defn list-handler [meta-db ent-name]
+(defn list-handler [meta-db resource-name]
   (fn [request]
     (let [conn (db/conn meta-db)
           db @conn
-          entity (d/entity meta-db [:entity/name ent-name])
-          list-fn (:entity/list-fn entity)
-          body-fn (:entity/body-fn entity)
+          list-fn (db/list-fn meta-db resource-name)
+          body-fn (db/body-fn meta-db resource-name)
           objects (list-fn db request)
           results (mapv #(body-fn meta-db db %) objects)]
       {:status 200

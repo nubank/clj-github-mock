@@ -1,7 +1,7 @@
 (ns clj-github-mock.generators
   (:require [clj-github-mock.handlers.repos :as repos]
             [clj-github-mock.impl.jgit :as jgit]
-            [clj-github-mock.api :as api]
+            [clj-github-mock.resource :as api]
             [clojure.test.check.generators :as gen]
             [clojure.test.check.random :as random]
             [clojure.test.check.rose-tree :as rose]

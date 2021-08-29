@@ -1,5 +1,5 @@
 (ns clj-github-mock.core
-  (:require [clj-github-mock.api :as api]
+  (:require [clj-github-mock.resource :as api]
             [clj-github-mock.handlers.repos :as repos]
             [ring.middleware.json :as middleware.json]
             [ring.mock.request :as mock]))

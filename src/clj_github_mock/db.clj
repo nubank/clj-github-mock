@@ -1,27 +1,49 @@
 (ns clj-github-mock.db
   (:require [datascript.core :as d]))
 
-(defn- schema [meta-db]
+(defn- db-schema [meta-db]
   (apply merge (d/q '[:find [?s ...]
                       :where
-                      [_ :entity/schema ?s]]
+                      [_ :resource/db-schema ?s]]
                     meta-db)))
 
 (defn- create-conn [meta-db]
-  [{:meta/meta :meta
-    :meta/conn (d/create-conn (schema meta-db))}])
+  [{:db/ident :meta
+    :meta/conn (d/create-conn (db-schema meta-db))}])
 
 (defn meta-db [tx-data]
-  (as-> (d/empty-db {:api/name {:db/unique :db.unique/identity}
-                     :api/parent {:db/valueType :db.type/ref}
-                     :entity/name {:db/unique :db.unique/identity}
-                     :meta/meta {:db/unique :db.unique/identity}})
+  (as-> (d/empty-db {:resource/name {:db/unique :db.unique/identity}
+                     :db/ident {:db/unique :db.unique/identity}})
       $
     (d/db-with $ tx-data)
     (d/db-with $ (create-conn $))))
 
 (defn meta-entity [meta-db]
-  (d/entity meta-db [:meta/meta :meta]))
+  (d/entity meta-db [:db/ident :meta]))
 
 (defn conn [meta-db]
   (:meta/conn (meta-entity meta-db)))
+
+(defn resource [meta-db resource-name]
+  (d/entity meta-db [:resource/name resource-name]))
+
+(defn lookup-fn [meta-db resource-name]
+  (:resource/lookup-fn (resource meta-db resource-name)))
+
+(defn body-fn [meta-db resource-name]
+  (:resource/body-fn (resource meta-db resource-name)))
+
+(defn post-fn [meta-db resource-name]
+  (:resource/post-fn (resource meta-db resource-name)))
+
+(defn post-schema [meta-db resource-name]
+  (:resource/post-schema (resource meta-db resource-name)))
+
+(defn patch-fn [meta-db resource-name]
+  (:resource/patch-fn (resource meta-db resource-name)))
+
+(defn patch-schema [meta-db resource-name]
+  (:resource/patch-schema (resource meta-db resource-name)))
+
+(defn list-fn [meta-db resource-name]
+  (:resource/list-fn (resource meta-db resource-name)))
