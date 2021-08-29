@@ -1,10 +1,10 @@
 (ns clj-github-mock.handlers.repos
-  (:require [clj-github-mock.impl.database :as database]
-            [clj-github-mock.impl.jgit :as jgit]
+  (:require [clj-github-mock.impl.jgit :as jgit]
             [reitit.ring :as ring]
             [ring.middleware.params :as middleware.params]
             [clj-github-mock.handlers :as handlers]
-            [clj-github-mock.db :as db]))
+            [clj-github-mock.db :as db]
+            [datascript.core :as d]))
 
 (defn- sha? [ref]
   (and ref
@@ -28,8 +28,11 @@
       {:status 404})))
 
 (defn repo-middleware [handler]
-  (fn [{database :database {:keys [org repo]} :path-params :as request}]
-    (let [repo (database/find-repo database org repo)]
+  (fn [{meta-db :meta-db {:keys [org repo]} :path-params :as request}]
+    (let [conn (db/conn meta-db)
+          db (d/db conn)
+          org-id (d/entid db [:org/name org])
+          repo (d/entity db [:repo/name+org [repo org-id]])]
       (handler (assoc request :repo repo)))))
 
 (defn routes [meta-db]
@@ -58,5 +61,4 @@
        (ring/router (routes meta-db))
        (ring/create-default-handler))
       (middleware.params/wrap-params)
-      (database/middleware (db/conn meta-db))
       (meta-db-middleware meta-db)))

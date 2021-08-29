@@ -1,7 +1,6 @@
 (ns clj-github-mock.handlers.repos-test
   (:require [base64-clj.core :as base64]
             [clj-github-mock.generators :as mock-gen]
-            [clj-github-mock.impl.database :as database]
             [clojure.data :as data]
             [clojure.string :as string]
             [clojure.test.check.clojure-test :refer [defspec]]
@@ -12,7 +11,6 @@
             [matcher-combinators.test]
             [ring.mock.request :as mock]
             [datascript.core :as d]
-            [clj-github-mock.db :as db]
             [clj-github-mock.impl.jgit :as jgit]))
 
 (defn org-repos-path [org-name]
@@ -78,7 +76,8 @@
    [{:keys [handler database org0]} (mock-gen/database {:org [[1]]})
     repo-name mock-gen/object-name]
    (handler (create-org-repo-request (:org/name org0) {:name repo-name}))
-   (database/find-repo database (:org/name org0) repo-name)))
+   (let [db @database]
+     (d/entid db [:repo/name+org [repo-name (d/entid db [:org/name (:org/name org0)])]]))))
 
 (def get-org-repo-response-schema
   [:map
