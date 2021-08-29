@@ -11,7 +11,8 @@
             [malli.core :as m]
             [matcher-combinators.standalone :refer [match?]]
             [matcher-combinators.test]
-            [ring.mock.request :as mock]))
+            [ring.mock.request :as mock]
+            [datascript.core :as d]))
 
 (defn org-repos-path [org-name]
   (str "/orgs/" org-name "/repos"))
@@ -137,8 +138,11 @@
   (prop/for-all
    [{:keys [handler database org0 repo0]} (mock-gen/database {:repo [[1]]})
     tree mock-gen/github-tree]
-   (let [{{:keys [sha]} :body} (handler (create-tree-request (:org/name org0) (:repo/name repo0) {:tree tree}))]
-     (-> repo0 :repo/jgit (jgit/get-tree sha)))))
+   (let [{{:keys [sha]} :body} (handler (create-tree-request (:org/name org0) (:repo/name repo0) {:tree tree}))
+         db @database]
+     (d/entid db [:tree/repo+sha [(d/entid db [:repo/name+org [(:repo/name repo0)
+                                                               (d/entid db [:org/name (:org/name org0)])]])
+                                  sha]]))))
 
 (def get-tree-response-schema
   [:map
@@ -154,11 +158,9 @@
 
 (defspec get-tree-respects-response-schema
   (prop/for-all
-   [{:keys [handler org0 repo0 tree]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
-                                                tree (mock-gen/tree (:repo/jgit repo0))]
-                                        (assoc database :tree tree))]
+   [{:keys [handler org0 repo0 tree0]} (mock-gen/database {:tree [[1]]})]
    (m/validate get-tree-response-schema
-               (handler (get-tree-request (:org/name org0) (:repo/name repo0) (:sha tree))))))
+               (handler (get-tree-request (:org/name org0) (:repo/name repo0) (:tree/sha tree0))))))
 
 (defn commits-path [org repo]
   (str "/repos/" org "/" repo "/git/commits"))

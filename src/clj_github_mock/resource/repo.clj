@@ -1,6 +1,5 @@
 (ns clj-github-mock.resource.repo
   (:require [medley.core :as m]
-            [clj-github-mock.impl.jgit :as jgit]
             [clojure.string :as string]
             [datascript.core :as d]))
 
@@ -26,8 +25,7 @@
                              body :body}]
                        {:repo/name (:name body)
                         :repo/org [:org/name org]
-                        :repo/attrs (merge repo-defaults (m/remove-keys #{:name} body))
-                        :repo/jgit (jgit/empty-repo)})
+                        :repo/attrs (merge repo-defaults (m/remove-keys #{:name} body))})
    :resource/patch-fn (fn [db {{:keys [org repo]} :path-params
                                body :body}]
                         (let [key [repo (d/entid db [:org/name org])]]

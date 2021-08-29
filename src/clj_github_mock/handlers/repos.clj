@@ -126,8 +126,8 @@
    ["/repos/:org/:repo" {:middleware [repo-middleware]}
     ["" {:get (handlers/get-handler meta-db :repo)
          :patch (handlers/patch-handler meta-db :repo)}]
-    ["/git/trees" {:post post-tree-handler}]
-    ["/git/trees/:sha" {:get get-tree-handler}]
+    ["/git/trees" {:post (handlers/post-handler meta-db :tree)}]
+    ["/git/trees/:sha" {:get (handlers/get-handler meta-db :tree)}]
     ["/git/commits" {:post post-commit-handler}]
     ["/git/commits/:sha" {:get get-commit-handler}]
     ["/git/refs" {:post post-ref-handler}]
@@ -137,9 +137,14 @@
     ["/branches/:branch" {:get get-branch-handler}]
     ["/contents/*path" {:get get-content-handler}]]])
 
+(defn meta-db-middleware [handler meta-db]
+  (fn [request]
+    (handler (assoc request :meta-db meta-db))))
+
 (defn handler [meta-db]
   (-> (ring/ring-handler
        (ring/router (routes meta-db))
        (ring/create-default-handler))
       (middleware.params/wrap-params)
-      (database/middleware (db/conn meta-db))))
+      (database/middleware (db/conn meta-db))
+      (meta-db-middleware meta-db)))
