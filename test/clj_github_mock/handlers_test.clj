@@ -82,3 +82,25 @@
               :body {:body {:attr ["missing required key"]}}}
              (handler {:path-params {:repo "my-repo"}
                        :body {}}))))))
+
+(deftest list-handler-test
+  (let [meta-db (db/meta-db [{:entity/name :repo
+                              :entity/schema {:repo/name {:db/unique :db.unique/identity}}
+                              :entity/body-fn (fn [_ _ repo]
+                                                {:name (:repo/name repo)})
+                              :entity/list-fn (fn [db _]
+                                                (->>
+                                                 (d/q '[:find [?r ...]
+                                                        :where
+                                                        [?r :repo/name]]
+                                                      db)
+                                                 (map #(d/entity db %))
+                                                 (sort-by :repo/name)))}])
+        _ (d/transact! (db/conn meta-db) [{:repo/name "repo1"}
+                                          {:repo/name "repo2"}])
+        handler (handlers/list-handler meta-db :repo)]
+    (testing "return results"
+      (is (= {:status 200
+              :body [{:name "repo1"}
+                     {:name "repo2"}]}
+             (handler {}))))))

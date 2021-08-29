@@ -121,7 +121,7 @@
       (handler (assoc request :repo repo)))))
 
 (defn routes [meta-db]
-  [["/orgs/:org/repos" {:get get-repos-handler
+  [["/orgs/:org/repos" {:get (handlers/list-handler meta-db :repo)
                         :post (handlers/post-handler meta-db :repo)}]
    ["/repos/:org/:repo" {:middleware [repo-middleware]}
     ["" {:get (handlers/get-handler meta-db :repo)

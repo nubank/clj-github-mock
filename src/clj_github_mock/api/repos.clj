@@ -35,4 +35,11 @@
                        (let [key [repo (d/entid db [:org/name org])]]
                          {:repo/name+org key
                           :repo/attrs (merge (-> (d/entity db [:repo/name+org key]) :repo/attrs)
-                                             body)}))}])
+                                             body)}))
+    :entity/list-fn (fn [db {{:keys [org]} :path-params}]
+                      (->> (d/q '[:find [?r ...]
+                                  :in $ ?org
+                                  :where
+                                  [?o :org/name ?org]
+                                  [?r :repo/org ?o]] db org)
+                           (map #(d/entity db %))))}])

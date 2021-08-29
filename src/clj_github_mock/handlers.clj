@@ -55,3 +55,15 @@
             {:status 422
              :body error}))
         {:status 404}))))
+
+(defn list-handler [meta-db ent-name]
+  (fn [request]
+    (let [conn (db/conn meta-db)
+          db @conn
+          entity (d/entity meta-db [:entity/name ent-name])
+          list-fn (:entity/list-fn entity)
+          body-fn (:entity/body-fn entity)
+          objects (list-fn db request)
+          results (mapv #(body-fn meta-db db %) objects)]
+      {:status 200
+       :body results})))
