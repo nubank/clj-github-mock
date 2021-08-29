@@ -1,6 +1,5 @@
 (ns clj-github-mock.generators
   (:require [clj-github-mock.handlers.repos :as repos]
-            [clj-github-mock.impl.database :as database]
             [clj-github-mock.impl.jgit :as jgit]
             [clj-github-mock.api :as api]
             [clojure.test.check.generators :as gen]
@@ -13,8 +12,7 @@
             [medley.core :refer [assoc-some map-keys map-vals]]
             [reifyhealth.specmonstah.core :as sm]
             [reifyhealth.specmonstah.spec-gen :as sg]
-            [clj-github-mock.db :as db]
-            [clj-github-mock.api.repos :as api.repos]))
+            [clj-github-mock.db :as db]))
 
 (def object-name
   "Generates a name for objects like org names, repo names, branches, tags, etc."
@@ -236,7 +234,7 @@
   [query]
   (gen/->Generator
    (fn [rnd size]
-     (let [meta-db (db/meta-db api.repos/model)
+     (let [meta-db (api/meta-db {})
            database (db/conn meta-db)
            ent-db (-> (ent-db-malli-gen {:schema (schema)
                                          :gen-options {:rnd-state (atom rnd)
