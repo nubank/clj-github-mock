@@ -9,5 +9,6 @@
    [org/resource
     repo/resource
     database/tree-resource
-    database/commit-resource]))
+    database/commit-resource
+    database/ref-resource]))
 

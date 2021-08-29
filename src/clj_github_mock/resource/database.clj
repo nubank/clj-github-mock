@@ -53,3 +53,27 @@
                                   [:message :string]
                                   [:tree :string]
                                   [:parents {:optional true} [:vector :string]]]]]})
+
+(def ref-resource
+  {:resource/name :ref
+   :resource/db-schema {:ref/repo+ref {:db/tupleAttrs [:ref/repo :ref/ref]
+                                       :db/unique :db.unique/identity}
+                        :ref/repo {:db/type :db.type/ref}}
+   :resource/body-fn (fn [_ _ ref]
+                       {:ref (:ref/ref ref)
+                        :object {:type :commit
+                                 :sha (:ref/sha ref)}})
+   :resource/lookup-fn (fn [db {:keys [org repo ref]}]
+                         [:ref/repo+ref [(d/entid db [:repo/name+org [repo (d/entid db [:org/name org])]]) (str "refs/" ref)]])
+   :resource/post-fn (fn [db {{:keys [org repo]} :path-params
+                              body :body}]
+                       {:ref/repo [:repo/name+org [repo (d/entid db [:org/name org])]]
+                        :ref/ref (:ref body)
+                        :ref/sha (:sha body)})
+   :resource/post-schema [:map
+                          [:path-params [:map
+                                         [:org :string]
+                                         [:repo :string]]]
+                          [:body [:map
+                                  [:ref :string]
+                                  [:sha :string]]]]})

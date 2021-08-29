@@ -130,10 +130,10 @@
     ["/git/trees/:sha" {:get (handlers/get-handler meta-db :tree)}]
     ["/git/commits" {:post (handlers/post-handler meta-db :commit)}]
     ["/git/commits/:sha" {:get (handlers/get-handler meta-db :commit)}]
-    ["/git/refs" {:post post-ref-handler}]
+    ["/git/refs" {:post (handlers/post-handler meta-db :ref)}]
     ["/git/refs/*ref" {:patch patch-ref-handler
                        :delete delete-ref-handler}]
-    ["/git/ref/*ref" {:get get-ref-handler}]
+    ["/git/ref/*ref" {:get (handlers/get-handler meta-db :ref)}]
     ["/branches/:branch" {:get get-branch-handler}]
     ["/contents/*path" {:get get-content-handler}]]])
 

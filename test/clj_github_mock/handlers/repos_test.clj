@@ -227,13 +227,14 @@
 
 (defspec create-ref-adds-ref-to-repo
   (prop/for-all
-   [{:keys [handler org0 repo0 commit]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
-                                                  commit (mock-gen/commit (:repo/jgit repo0))]
-                                          (assoc database :commit commit))
+   [{:keys [handler database org0 repo0 commit0]} (mock-gen/database {:commit [[1]]})
     ref (gen/fmap #(str "refs/heads/" %) mock-gen/object-name)]
    (handler (create-ref-request (:org/name org0) (:repo/name repo0) {:ref ref
-                                                                     :sha (:sha commit)}))
-   (-> repo0 :repo/jgit (jgit/get-reference ref))))
+                                                                     :sha (:commit/sha commit0)}))
+   (let [db @database]
+     (d/entid db [:ref/repo+ref [(d/entid db [:repo/name+org [(:repo/name repo0)
+                                                               (d/entid db [:org/name (:org/name org0)])]])
+                                  ref]]))))
 
 (defspec update-ref-updates-the-ref
   (prop/for-all
