@@ -1,4 +1,4 @@
-(ns clj-github-mock.resource.database
+(ns clj-github-mock.resource.git-database
   (:require [clj-github-mock.impl.jgit :as jgit]
             [datascript.core :as d]
             [clj-github-mock.handlers :as handlers]))
