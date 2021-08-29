@@ -8,13 +8,13 @@
 (deftest post-handler-test
   (let [meta-db (db/meta-db [{:resource/name :repo
                               :resource/db-schema {:repo/name {:db/unique :db.unique/identity}}
-                              :resource/post-fn (fn [_ {:keys [body]}]
-                                                {:repo/name (:name body)
-                                                 :repo/data (m/remove-keys #{:name} body)})
+                              :resource/post-fn (handlers/db-transact-fn (fn [_ {:keys [body]}]
+                                                                               {:repo/name (:name body)
+                                                                                :repo/data (m/remove-keys #{:name} body)}))
                               :resource/post-schema [:map
                                                    [:body [:map
                                                            [:name :string]]]]
-                              :resource/body-fn (fn [_ _ repo]
+                              :resource/body-fn (fn [_ repo]
                                                 (merge
                                                  {:name (:repo/name repo)}
                                                  (:repo/data repo)))}])
@@ -33,11 +33,12 @@
 (deftest get-handler-test
   (let [meta-db (db/meta-db [{:resource/name :repo
                               :resource/db-schema {:repo/name {:db/unique :db.unique/identity}}
-                              :resource/body-fn (fn [_ _ repo]
+                              :resource/body-fn (fn [_ repo]
                                                 {:name (:repo/name repo)
                                                  :attr (:repo/attr repo)})
-                              :resource/lookup-fn (fn [_ {{:keys [repo]} :path-params}]
-                                                  [:repo/name repo])}])
+                              :resource/lookup-fn (handlers/db-lookup-fn
+                                                   (fn [_ {{:keys [repo]} :path-params}]
+                                                     [:repo/name repo]))}])
         _ (d/transact! (db/conn meta-db) [{:repo/name "my-repo"
                                            :repo/attr "value"}])
         handler (handlers/get-handler meta-db :repo)]
@@ -53,15 +54,16 @@
 (deftest patch-handler-test
   (let [meta-db (db/meta-db [{:resource/name :repo
                               :resource/db-schema {:repo/name {:db/unique :db.unique/identity}}
-                              :resource/body-fn (fn [_ _ repo]
+                              :resource/body-fn (fn [_ repo]
                                                 {:name (:repo/name repo)
                                                  :attr (:repo/attr repo)})
-                              :resource/lookup-fn (fn [_ {{:keys [repo]} :path-params}]
-                                                  [:repo/name repo])
-                              :resource/patch-fn (fn [_ {{:keys [repo]} :path-params
-                                                       body :body}]
-                                                 {:repo/name repo
-                                                  :repo/attr (:attr body)})
+                              :resource/lookup-fn (handlers/db-lookup-fn
+                                                   (fn [_ {{:keys [repo]} :path-params}]
+                                                     [:repo/name repo]))
+                              :resource/patch-fn (handlers/db-transact-fn (fn [_ {{:keys [repo]} :path-params
+                                                                                body :body}]
+                                                                          {:repo/name repo
+                                                                           :repo/attr (:attr body)}))
                               :resource/patch-schema [:map
                                                     [:body [:map
                                                             [:attr :string]]]]}])
@@ -86,16 +88,16 @@
 (deftest list-handler-test
   (let [meta-db (db/meta-db [{:resource/name :repo
                               :resource/db-schema {:repo/name {:db/unique :db.unique/identity}}
-                              :resource/body-fn (fn [_ _ repo]
+                              :resource/body-fn (fn [_ repo]
                                                 {:name (:repo/name repo)})
-                              :resource/list-fn (fn [db _]
-                                                (->>
-                                                 (d/q '[:find [?r ...]
-                                                        :where
-                                                        [?r :repo/name]]
-                                                      db)
-                                                 (map #(d/entity db %))
-                                                 (sort-by :repo/name)))}])
+                              :resource/list-fn (handlers/db-list-fn (fn [db _]
+                                                                       (->>
+                                                                        (d/q '[:find [?r ...]
+                                                                               :where
+                                                                               [?r :repo/name]]
+                                                                             db)
+                                                                        (map #(d/entity db %))
+                                                                        (sort-by :repo/name))))}])
         _ (d/transact! (db/conn meta-db) [{:repo/name "repo1"}
                                           {:repo/name "repo2"}])
         handler (handlers/list-handler meta-db :repo)]
@@ -108,8 +110,9 @@
 (deftest delete-handler-test
   (let [meta-db (db/meta-db [{:resource/name :repo
                               :resource/db-schema {:repo/name {:db/unique :db.unique/identity}}
-                              :resource/lookup-fn (fn [_ {{:keys [repo]} :path-params}]
-                                                    [:repo/name repo])}])
+                              :resource/delete-fn (handlers/db-delete-fn
+                                                   (fn [_ {{:keys [repo]} :path-params}]
+                                                     [:repo/name repo]))}])
         _ (d/transact! (db/conn meta-db) [{:repo/name "repo"}])
         handler (handlers/delete-handler meta-db :repo)]
     (testing "deletes entity"

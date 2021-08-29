@@ -12,7 +12,8 @@
             [matcher-combinators.test]
             [ring.mock.request :as mock]
             [datascript.core :as d]
-            [clj-github-mock.db :as db]))
+            [clj-github-mock.db :as db]
+            [clj-github-mock.impl.jgit :as jgit]))
 
 (defn org-repos-path [org-name]
   (str "/orgs/" org-name "/repos"))
@@ -140,9 +141,7 @@
     tree mock-gen/github-tree]
    (let [{{:keys [sha]} :body} (handler (create-tree-request (:org/name org0) (:repo/name repo0) {:tree tree}))
          db @database]
-     (d/entid db [:tree/repo+sha [(d/entid db [:repo/name+org [(:repo/name repo0)
-                                                               (d/entid db [:org/name (:org/name org0)])]])
-                                  sha]]))))
+     (jgit/get-tree (:repo/jgit repo0) sha))))
 
 (def get-tree-response-schema
   [:map
@@ -158,9 +157,11 @@
 
 (defspec get-tree-respects-response-schema
   (prop/for-all
-   [{:keys [handler org0 repo0 tree0]} (mock-gen/database {:tree [[1]]})]
+   [{:keys [handler org0 repo0 tree]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
+                                                tree (mock-gen/tree (:repo/jgit repo0))]
+                                        (assoc database :tree tree))]
    (m/validate get-tree-response-schema
-               (handler (get-tree-request (:org/name org0) (:repo/name repo0) (:tree/sha tree0))))))
+               (handler (get-tree-request (:org/name org0) (:repo/name repo0) (:sha tree))))))
 
 (defn commits-path [org repo]
   (str "/repos/" org "/" repo "/git/commits"))
@@ -178,17 +179,15 @@
 (defspec create-commit-adds-commit-to-repo
   (prop/for-all
    [{:keys [handler database org0 repo0 tree]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
-                                                tree (mock-gen/tree (:repo/jgit repo0))]
-                                        (assoc database :tree tree))
+                                                         tree (mock-gen/tree (:repo/jgit repo0))]
+                                                 (assoc database :tree tree))
     message gen/string]
    (let [{{:keys [sha]} :body} (handler (create-commit-request (:org/name org0)
                                                                (:repo/name repo0)
                                                                {:message message
                                                                 :tree (:sha tree)}))
          db @database]
-     (d/entid db [:commit/repo+sha [(d/entid db [:repo/name+org [(:repo/name repo0)
-                                                               (d/entid db [:org/name (:org/name org0)])]])
-                                  sha]]))))
+     (jgit/get-commit (:repo/jgit repo0) sha))))
 
 (def get-commit-response-schema
   [:map
@@ -201,9 +200,11 @@
 
 (defspec get-commit-respects-response-schema
   (prop/for-all
-   [{:keys [handler org0 repo0 commit0]} (mock-gen/database {:commit [[1]]})]
+   [{:keys [handler org0 repo0 commit]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
+                                                  commit (mock-gen/commit (:repo/jgit repo0))]
+                                          (assoc database :commit commit))]
    (m/validate get-commit-response-schema
-               (handler (get-commit-request (:org/name org0) (:repo/name repo0) (:commit/sha commit0))))))
+               (handler (get-commit-request (:org/name org0) (:repo/name repo0) (:sha commit))))))
 
 (defn ref-path [org repo ref]
   (str "/repos/" org "/" repo "/git/ref/" ref))
@@ -227,25 +228,25 @@
 
 (defspec create-ref-adds-ref-to-repo
   (prop/for-all
-   [{:keys [handler database org0 repo0 commit0]} (mock-gen/database {:commit [[1]]})
-    ref (gen/fmap #(str "refs/heads/" %) mock-gen/object-name)]
+   [{:keys [handler database org0 repo0]} (mock-gen/database {:repo [[1]]})
+    ref (gen/fmap #(str "refs/heads/" %) mock-gen/object-name)
+    sha gen/string]
    (handler (create-ref-request (:org/name org0) (:repo/name repo0) {:ref ref
-                                                                     :sha (:commit/sha commit0)}))
+                                                                     :sha sha}))
    (let [db @database]
      (d/entid db [:ref/repo+ref [(d/entid db [:repo/name+org [(:repo/name repo0)
-                                                               (d/entid db [:org/name (:org/name org0)])]])
-                                  ref]]))))
+                                                              (d/entid db [:org/name (:org/name org0)])]])
+                                 ref]]))))
 
 (defspec update-ref-updates-the-ref
   (prop/for-all
-   [{:keys [handler database org0 repo0 branch0 commit]} (gen/let [{:keys [branch0 meta-db] :as database} (mock-gen/database {:branch [[1]]})
-                                                         commit (mock-gen/commit (db/jgit-repo meta-db) (-> branch0 :ref/sha))]
-                                                 (assoc database :commit commit))]
-   (handler (update-ref-request (:org/name org0) (:repo/name repo0) (string/replace (:ref/ref branch0) #"refs/" "") {:sha (:sha commit)}))
+   [{:keys [handler database org0 repo0 branch0]} (mock-gen/database {:branch [[1]]})
+    sha gen/string]
+   (handler (update-ref-request (:org/name org0) (:repo/name repo0) (string/replace (:ref/ref branch0) #"refs/" "") {:sha sha}))
    (let [db @database]
-     (= (:sha commit) (:ref/sha (d/entity db [:ref/repo+ref [(d/entid db [:repo/name+org [(:repo/name repo0)
-                                                               (d/entid db [:org/name (:org/name org0)])]])
-                                  (:ref/ref branch0)]]))))))
+     (= sha (:ref/sha (d/entity db [:ref/repo+ref [(d/entid db [:repo/name+org [(:repo/name repo0)
+                                                                                (d/entid db [:org/name (:org/name org0)])]])
+                                                   (:ref/ref branch0)]]))))))
 
 (defspec delete-ref-removes-ref-from-repo
   (prop/for-all
@@ -253,8 +254,8 @@
    (handler (delete-ref-request (:org/name org0) (:repo/name repo0) (string/replace (:ref/ref branch0) #"refs/" "")))
    (let [db @database]
      (nil? (d/entid db [:ref/repo+ref [(d/entid db [:repo/name+org [(:repo/name repo0)
-                                                               (d/entid db [:org/name (:org/name org0)])]])
-                                  (:ref/ref branch0)]])))))
+                                                                    (d/entid db [:org/name (:org/name org0)])]])
+                                       (:ref/ref branch0)]])))))
 
 (defn branch-path [org repo branch]
   (str "/repos/" org "/" repo "/branches/" branch))

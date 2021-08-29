@@ -50,5 +50,8 @@
 (defn patch-schema [meta-db resource-name]
   (:resource/patch-schema (resource meta-db resource-name)))
 
+(defn delete-fn [meta-db resource-name]
+  (:resource/delete-fn (resource meta-db resource-name)))
+
 (defn list-fn [meta-db resource-name]
   (:resource/list-fn (resource meta-db resource-name)))

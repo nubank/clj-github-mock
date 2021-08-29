@@ -154,7 +154,7 @@
         {:keys [tree]} (jgit/get-flatten-tree repo (-> commit :tree :sha))]
     (gen/elements tree)))
 
-(defn- schema [jgit-repo]
+(defn- schema []
   {:org {:prefix :org
          :malli-schema [:map
                         [:org/name [:string {:gen/gen (unique-object-name)}]]]}
@@ -165,18 +165,10 @@
                                        [:default_branch [:= "main"]]]]
                          [:repo/jgit [:any {:gen/fmap (fn [_] (jgit/empty-repo))}]]]
           :relations {:repo/org [:org :org/name]}}
-   :tree {:prefix :tree
-          :malli-schema [:map
-                         [:tree/sha [:string {:gen/gen (gen/fmap :sha (tree jgit-repo))}]]]
-          :relations {:tree/repo [:repo :repo/name+org]}}
-   :commit {:prefix :commit
-            :malli-schema [:map
-                           [:commit/sha [:string {:gen/gen (gen/fmap :sha (commit jgit-repo))}]]]
-            :relations {:commit/repo [:repo :repo/name+org]}}
    :branch {:prefix :branch
             :malli-schema [:map
-                           [:ref/ref [:string {:gen/gen (gen/fmap #(str "refs/heads/" %) (unique-object-name))}]
-                            :ref/sha [:string {:gen/gen (gen/fmap (comp :sha :commit) (branch  jgit-repo))}]]]
+                           [:ref/ref [:string {:gen/gen (gen/fmap #(str "refs/heads/" %) (unique-object-name))}]]
+                           [:ref/sha :string]]
             :relations {:ref/repo [:repo :repo/name+org]}}})
 
 (defn- malli-create-gen
@@ -249,7 +241,7 @@
    (fn [rnd size]
      (let [meta-db (resource/meta-db {})
            database (db/conn meta-db)
-           ent-db (-> (ent-db-malli-gen {:schema (schema (db/jgit-repo meta-db))
+           ent-db (-> (ent-db-malli-gen {:schema (schema)
                                          :gen-options {:rnd-state (atom rnd)
                                                        :size size}}
                                         query)
