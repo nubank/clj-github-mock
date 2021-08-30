@@ -58,3 +58,23 @@
    :resource/body-fn (fn [_ branch]
                        {:name (string/replace (:ref/ref branch) "refs/heads/" "")
                         :commit {:sha (:ref/sha branch)}})})
+
+(defn- sha? [ref]
+  (and ref
+       (re-find #"^[A-Fa-f0-9]{40}$" ref)))
+
+(defn- content-sha [git-repo ref default_branch]
+  (if (sha? ref)
+    ref
+    (let [branch (or ref default_branch)]
+      (get-in (jgit/get-reference git-repo (str "refs/heads/" branch)) [:object :sha]))))
+
+(def content-resource
+  {:resource/name :content
+   :resource/lookup-fn (fn [_ {{git-repo :repo/jgit
+                                {:keys [default_branch]} :repo/attrs} :repo
+                               {:keys [path]} :path-params
+                               {:strs [ref]} :query-params}]
+                         (let [sha (content-sha git-repo ref default_branch)]
+                           (when sha (jgit/get-content git-repo sha path))))
+   :resource/body-fn (fn [_ content] content)})

@@ -11,5 +11,6 @@
     git-database/commit-resource
     git-database/ref-resource
     repo/resource
-    repo/branch-resource]))
+    repo/branch-resource
+    repo/content-resource]))
 
