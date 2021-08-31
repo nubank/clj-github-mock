@@ -2,15 +2,26 @@
   (:require [clj-github-mock.resource.repo :as repo]
             [clj-github-mock.resource.org :as org]
             [clj-github-mock.resource.git-database :as git-database]
-            [clj-github-mock.db :as db]))
+            [ring.middleware.params :as middleware.params]
+            [reitit.ring :as ring]
+            [datascript.core :as d]))
 
-(defn meta-db [_initial_state]
-  (db/meta-db
-   [org/resource
-    git-database/tree-resource
-    git-database/commit-resource
-    git-database/ref-resource
-    repo/resource
-    repo/branch-resource
-    repo/content-resource]))
+; TODO use initial state
+(defn conn [_initial_state]
+  (d/create-conn (merge
+                  org/db-schema
+                  repo/db-schema
+                  git-database/db-schema)))
 
+(defn conn-middleware [handler conn]
+  (fn [request]
+    (handler (assoc request :conn conn))))
+
+(defn handler [conn]
+  (-> (ring/ring-handler
+       (ring/router (concat
+                     repo/routes
+                     git-database/routes))
+       (ring/create-default-handler))
+      (middleware.params/wrap-params)
+      (conn-middleware conn)))

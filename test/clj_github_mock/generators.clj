@@ -1,6 +1,5 @@
 (ns clj-github-mock.generators
-  (:require [clj-github-mock.handlers.repos :as repos]
-            [clj-github-mock.impl.jgit :as jgit]
+  (:require [clj-github-mock.impl.jgit :as jgit]
             [clj-github-mock.resource :as resource]
             [clojure.test.check.generators :as gen]
             [clojure.test.check.random :as random]
@@ -11,8 +10,7 @@
             [malli.generator :as mg]
             [medley.core :refer [assoc-some map-keys map-vals]]
             [reifyhealth.specmonstah.core :as sm]
-            [reifyhealth.specmonstah.spec-gen :as sg]
-            [clj-github-mock.db :as db]))
+            [reifyhealth.specmonstah.spec-gen :as sg]))
 
 (def object-name
   "Generates a name for objects like org names, repo names, branches, tags, etc."
@@ -239,8 +237,7 @@
   [query]
   (gen/->Generator
    (fn [rnd size]
-     (let [meta-db (resource/meta-db {})
-           database (db/conn meta-db)
+     (let [database (resource/conn {}) 
            ent-db (-> (ent-db-malli-gen {:schema (schema)
                                          :gen-options {:rnd-state (atom rnd)
                                                        :size size}}
@@ -248,9 +245,8 @@
                       (sm/visit-ents-once :inserted-data (partial insert database)))]
        (rose/pure
         (merge
-         {:handler (repos/handler meta-db)
+         {:handler (resource/handler database)
           :database database
-          :meta-db meta-db
           :ent-db ent-db
           :ents (ents-attrs-map ent-db)}
          (ent-attrs-map ent-db)))))))

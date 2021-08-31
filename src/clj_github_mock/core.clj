@@ -1,6 +1,5 @@
 (ns clj-github-mock.core
   (:require [clj-github-mock.resource :as api]
-            [clj-github-mock.handlers.repos :as repos]
             [ring.middleware.json :as middleware.json]
             [ring.mock.request :as mock]))
 
@@ -20,8 +19,8 @@
   `default_branch` is optional and will default to \"main\".
   "
   [{:keys [initial-state] :as _opts}]
-  (-> (api/meta-db initial-state)
-      (repos/handler)
+  (-> (api/conn initial-state)
+      (api/handler)
       (middleware.json/wrap-json-body {:keywords? true})
       (middleware.json/wrap-json-response)))
 
