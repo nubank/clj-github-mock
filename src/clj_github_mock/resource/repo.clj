@@ -22,38 +22,49 @@
 (defn repo-key [db {{:keys [org repo]} :path-params}]
   [:repo/name+org [repo (d/entid db [:org/name org])]])
 
+(defn repo-body [repo]
+  (merge
+   {:name (:repo/name repo)
+    :full_name (string/join "/" [(-> repo :repo/org :org/name) (:repo/name repo)])}
+   (:repo/attrs repo)))
+
+(defn repo-post [_ {{:keys [org]} :path-params
+                    body :body}]
+  {:repo/name (:name body)
+   :repo/org [:org/name org]
+   :repo/attrs (merge repo-defaults (m/remove-keys #{:name} body))
+   :repo/jgit (jgit/empty-repo)})
+
+(defn repo-patch [db {{:keys [org repo]} :path-params
+                      body :body}]
+  (let [key [repo (d/entid db [:org/name org])]]
+    {:repo/name+org key
+     :repo/attrs (merge (-> (d/entity db [:repo/name+org key]) :repo/attrs)
+                        body)}))
+
+(defn repo-list [db {{:keys [org]} :path-params}]
+  (->> (d/q '[:find [?r ...]
+              :in $ ?org
+              :where
+              [?o :org/name ?org]
+              [?r :repo/org ?o]] db org)
+       (map #(d/entity db %))))
+
 (def repo-resource
   {:lookup-fn (handlers/db-lookup-fn repo-key)
-   :body-fn (fn [repo]
-              (merge
-               {:name (:repo/name repo)
-                :full_name (string/join "/" [(-> repo :repo/org :org/name) (:repo/name repo)])}
-               (:repo/attrs repo)))
+   :body-fn repo-body
    :post-schema [:map
+                 [:path-params [:map
+                                [:org :string]]]
                  [:body [:map
                          [:name :string]]]]
-   :post-fn (handlers/db-transact-fn
-             (fn [_ {{:keys [org]} :path-params
-                     body :body}]
-               {:repo/name (:name body)
-                :repo/org [:org/name org]
-                :repo/attrs (merge repo-defaults (m/remove-keys #{:name} body))
-                :repo/jgit (jgit/empty-repo)}))
-   :patch-fn (handlers/db-transact-fn
-              (fn [db {{:keys [org repo]} :path-params
-                       body :body}]
-                (let [key [repo (d/entid db [:org/name org])]]
-                  {:repo/name+org key
-                   :repo/attrs (merge (-> (d/entity db [:repo/name+org key]) :repo/attrs)
-                                      body)})))
-   :list-fn (handlers/db-list-fn
-             (fn [db {{:keys [org]} :path-params}]
-               (->> (d/q '[:find [?r ...]
-                           :in $ ?org
-                           :where
-                           [?o :org/name ?org]
-                           [?r :repo/org ?o]] db org)
-                    (map #(d/entity db %)))))})
+   :post-fn (handlers/db-transact-fn repo-post)
+   :patch-fn (handlers/db-transact-fn repo-patch)
+   :patch-schema [:map
+                 [:path-params [:map
+                                [:org :string]
+                                [:repo :string]]]]
+   :list-fn (handlers/db-list-fn repo-list)})
 
 (defn branch-key [db {{:keys [org repo branch]} :path-params}]
   [:ref/repo+ref [(d/entid db [:repo/name+org [repo (d/entid db [:org/name org])]]) (str "refs/heads/" branch)]])
@@ -77,11 +88,11 @@
 
 (def content-resource
   {:lookup-fn (fn [{{git-repo :repo/jgit
-                                {:keys [default_branch]} :repo/attrs} :repo
-                               {:keys [path]} :path-params
-                               {:strs [ref]} :query-params}]
-                         (let [sha (content-sha git-repo ref default_branch)]
-                           (when sha (jgit/get-content git-repo sha path))))
+                     {:keys [default_branch]} :repo/attrs} :repo
+                    {:keys [path]} :path-params
+                    {:strs [ref]} :query-params}]
+                (let [sha (content-sha git-repo ref default_branch)]
+                  (when sha (jgit/get-content git-repo sha path))))
    :body-fn identity})
 
 (def routes

@@ -205,9 +205,10 @@
       (sm/visit-ents-once :spec-gen malli-gen)))
 
 (defn- insert-datascript [database ent-db {:keys [spec-gen] :as ent-attrs}]
-  (let [datoms (assoc-ent-at-foreign-keys ent-db ent-attrs)]
-    (d/transact! database [datoms])
-    spec-gen))
+  (let [datoms (-> (assoc-ent-at-foreign-keys ent-db ent-attrs)
+                   (assoc :db/id "eid"))
+        {{:strs [eid]} :tempids db :db-after} (d/transact! database [datoms])]
+    (d/entity db eid)))
 
 (defn- insert [database ent-db ent-attrs]
   (insert-datascript database ent-db ent-attrs))
@@ -248,5 +249,9 @@
          {:handler (resource/handler database)
           :database database
           :ent-db ent-db
+          :db @database
           :ents (ents-attrs-map ent-db)}
          (ent-attrs-map ent-db)))))))
+
+(defn gen-ents [query]
+  (gen/generate (database query)))
