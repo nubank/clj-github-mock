@@ -55,3 +55,16 @@
   (let [{:keys [org0 repo0 repo1 db]} (mock-gen/gen-ents {:repo [[2]]})]
     (is (= (set (map :db/id [repo0 repo1])) 
            (set (map :db/id (repo/repo-list db {:path-params {:org (:org/name org0)}})))))))
+
+(deftest branch-key-test
+  (let [{:keys [repo0 db]} (mock-gen/gen-ents {:repo [[1]]})]
+    (is (= [:ref/repo+ref [(:db/id repo0) "refs/heads/my-branch"]]
+           (repo/branch-key db {:path-params {:org (-> repo0 :repo/org :org/name)
+                                              :repo (:repo/name repo0)
+                                              :branch "my-branch"}})))))
+
+(deftest branch-body-test
+  (is (match? {:name "my-branch"
+               :commit {:sha "some-sha"}}
+              (repo/branch-body {:ref/ref "refs/heads/my-branch"
+                                 :ref/sha "some-sha"}))))

@@ -69,12 +69,14 @@
 (defn branch-key [db {{:keys [org repo branch]} :path-params}]
   [:ref/repo+ref [(d/entid db [:repo/name+org [repo (d/entid db [:org/name org])]]) (str "refs/heads/" branch)]])
 
+(defn branch-body [branch]
+  {:name (string/replace (:ref/ref branch) "refs/heads/" "")
+   :commit {:sha (:ref/sha branch)}})
+
 ; TODO complete commit object
 (def branch-resource
   {:lookup-fn (handlers/db-lookup-fn branch-key)
-   :body-fn (fn [branch]
-              {:name (string/replace (:ref/ref branch) "refs/heads/" "")
-               :commit {:sha (:ref/sha branch)}})})
+   :body-fn branch-body})
 
 (defn- sha? [ref]
   (and ref
