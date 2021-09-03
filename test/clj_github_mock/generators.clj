@@ -142,22 +142,32 @@
     (jgit/get-branch repo branch-name)))
 
 (defn random-file
-  "Creates a generator that given a jgit repository and a branch name randomly selects a file contained in that branch.
+  "Creates a generator that given a jgit repository and the sha of a commit and randomly selects a file contained in that commit.
   The file is returned as a github tree object.
 
   Note: the generator is not purely functional since a jgit repository is mutable"
-  [repo branch-name]
-  (let [branch (jgit/get-branch repo branch-name)
-        commit (jgit/get-commit repo (-> branch :commit :sha))
+  [repo sha]
+  (let [commit (jgit/get-commit repo sha)
         {:keys [tree]} (jgit/get-flatten-tree repo (-> commit :tree :sha))]
     (gen/elements tree)))
+
+(defn branch-transact [db branch]
+  (let [git-repo (-> (d/entity db (:ref/repo branch)) :repo/jgit)
+        tree (jgit/create-tree! git-repo {:tree (or (:branch/content branch) [])})
+        commit (jgit/create-commit! git-repo {:tree (:sha tree)
+                                              :message "initial commit"})]
+    [(-> branch
+         (assoc :ref/sha (:sha commit))
+         (dissoc :branch/content))]))
 
 (defn- schema []
   {:org {:prefix :org
          :malli-schema [:map
                         [:org/name [:string {:gen/gen (unique-object-name)}]]]}
    :repo {:prefix :repo
+          :db-schema {:repo/id {:db/unique :db.unique/identity}}
           :malli-schema [:map
+                         [:repo/id :uuid]
                          [:repo/name [:string {:gen/gen (unique-object-name)}]]
                          [:repo/attrs [:map
                                        [:default_branch [:= "main"]]]]
@@ -166,8 +176,9 @@
    :branch {:prefix :branch
             :malli-schema [:map
                            [:ref/ref [:string {:gen/gen (gen/fmap #(str "refs/heads/" %) (unique-object-name))}]]
-                           [:ref/sha :string]]
-            :relations {:ref/repo [:repo :repo/name+org]}}})
+                           [:branch/content [:vector {:gen/gen github-tree} :any]]]
+            :relations {:ref/repo [:repo :repo/id]}
+            :transact-fn branch-transact}})
 
 (defn- malli-create-gen
   [ent-db]
@@ -185,7 +196,7 @@
   (cond
     ; TODO: use constraints to detect if it is a multi relationship
     (vector? foreign-key-val) (set (map (partial foreign-key-ent path) foreign-key-val))
-    :else {foreign-key-attr foreign-key-val}))
+    :else [foreign-key-attr foreign-key-val]))
 
 (defn- assoc-ent-at-foreign-keys [db {:keys [ent-type spec-gen]}]
   (reduce
@@ -204,10 +215,14 @@
       (sm/add-ents query)
       (sm/visit-ents-once :spec-gen malli-gen)))
 
-(defn- insert-datascript [database ent-db {:keys [spec-gen] :as ent-attrs}]
-  (let [datoms (-> (assoc-ent-at-foreign-keys ent-db ent-attrs)
+(defn- no-op-transact [_ datoms]
+  [datoms])
+
+(defn- insert-datascript [database ent-db {:keys [ent-type] :as ent-attrs}]
+  (let [transact-fn (or (-> ent-db :schema ent-type :transact-fn) no-op-transact)
+        datoms (-> (assoc-ent-at-foreign-keys ent-db ent-attrs)
                    (assoc :db/id "eid"))
-        {{:strs [eid]} :tempids db :db-after} (d/transact! database [datoms])]
+        {{:strs [eid]} :tempids db :db-after} (d/transact! database [[:db.fn/call transact-fn datoms]])]
     (d/entity db eid)))
 
 (defn- insert [database ent-db ent-attrs]
@@ -238,8 +253,12 @@
   [query]
   (gen/->Generator
    (fn [rnd size]
-     (let [database (resource/conn {}) 
-           ent-db (-> (ent-db-malli-gen {:schema (schema)
+     (let [the-schema (schema)
+           database (resource/conn {:db-schema (->> (vals the-schema)
+                                                    (map :db-schema)
+                                                    (remove nil?)
+                                                    (apply merge))})
+           ent-db (-> (ent-db-malli-gen {:schema the-schema
                                          :gen-options {:rnd-state (atom rnd)
                                                        :size size}}
                                         query)

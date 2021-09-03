@@ -5,7 +5,7 @@
             [clj-github-mock.resource.repo :as repo]))
 
 (def db-schema {:ref/repo+ref {:db/tupleAttrs [:ref/repo :ref/ref]
-                              :db/unique :db.unique/identity}
+                               :db/unique :db.unique/identity}
                :ref/repo {:db/type :db.type/ref}})
 
 (def tree-resource

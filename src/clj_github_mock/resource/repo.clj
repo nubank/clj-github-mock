@@ -61,9 +61,9 @@
    :post-fn (handlers/db-transact-fn repo-post)
    :patch-fn (handlers/db-transact-fn repo-patch)
    :patch-schema [:map
-                 [:path-params [:map
-                                [:org :string]
-                                [:repo :string]]]]
+                  [:path-params [:map
+                                 [:org :string]
+                                 [:repo :string]]]]
    :list-fn (handlers/db-list-fn repo-list)})
 
 (defn branch-key [db {{:keys [org repo branch]} :path-params}]
@@ -82,20 +82,28 @@
   (and ref
        (re-find #"^[A-Fa-f0-9]{40}$" ref)))
 
-(defn- content-sha [git-repo ref default_branch]
+(defn- content-sha [db {repo-id :db/id {:keys [default_branch]} :repo/attrs} ref]
   (if (sha? ref)
     ref
     (let [branch (or ref default_branch)]
-      (get-in (jgit/get-reference git-repo (str "refs/heads/" branch)) [:object :sha]))))
+      (:ref/sha (d/entity db [:ref/repo+ref [repo-id (str "refs/heads/" branch)]])))))
+
+(defn content-lookup [{{git-repo :repo/jgit :as repo} :repo
+                       {:keys [path]} :path-params
+                       {:strs [ref]} :query-params
+                       conn :conn}]
+  (when-let [sha (content-sha @conn repo ref)]
+    (when (jgit/path-exists? git-repo sha path)
+      {:repo repo
+       :sha  sha
+       :path path})))
+
+(defn content-body [{{git-repo :repo/jgit} :repo :keys [path sha]}]
+  (jgit/get-content git-repo sha path))
 
 (def content-resource
-  {:lookup-fn (fn [{{git-repo :repo/jgit
-                     {:keys [default_branch]} :repo/attrs} :repo
-                    {:keys [path]} :path-params
-                    {:strs [ref]} :query-params}]
-                (let [sha (content-sha git-repo ref default_branch)]
-                  (when sha (jgit/get-content git-repo sha path))))
-   :body-fn identity})
+  {:lookup-fn content-lookup
+   :body-fn content-body})
 
 (def routes
   [["/orgs/:org/repos" {:get (handlers/list-handler repo-resource)

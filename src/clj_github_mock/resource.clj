@@ -7,11 +7,12 @@
             [datascript.core :as d]))
 
 ; TODO use initial state
-(defn conn [_initial_state]
+(defn conn [{:keys [db-schema] :or {db-schema {}} :as _initial-state}]
   (d/create-conn (merge
                   org/db-schema
                   repo/db-schema
-                  git-database/db-schema)))
+                  git-database/db-schema
+                  db-schema)))
 
 (defn conn-middleware [handler conn]
   (fn [request]

@@ -229,3 +229,11 @@
         {:type "file"
          :path path
          :content (base64/encode content "UTF-8")}))))
+
+(defn path-exists? [repo sha path]
+  (let [reader (new-reader repo)
+        commit (RevCommit/parse (load-object reader (ObjectId/fromString sha)))
+        tree-id (-> commit (.getTree) (.getId))
+        tree-walk (TreeWalk/forPath ^ObjectReader reader ^String path (into-array AnyObjectId [tree-id]))
+        object-id (when tree-walk (.getObjectId tree-walk 0))]
+    (boolean object-id)))

@@ -280,34 +280,32 @@
 
 (defspec get-content-returns-content
   (prop/for-all
-   [{:keys [handler org0 repo0 branch file]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
-                                                       branch (mock-gen/branch (:repo/jgit repo0) :num-commits 1)
-                                                       file (mock-gen/random-file (:repo/jgit repo0) (:name branch))]
-                                               (assoc database :branch branch :file file))]
+   [{:keys [handler org0 repo0 branch0 file]} (gen/let [{:keys [repo0 branch0] :as database} (mock-gen/database {:branch [[1]]})
+                                                       file (mock-gen/random-file (:repo/jgit repo0) (:ref/sha branch0))]
+                                               (assoc database :file file))]
    (= {:status 200
        :body {:type "file"
               :path (:path file)
               :content (base64/encode (:content file) "UTF-8")}}
-      (handler (get-content-request (:org/name org0) (:repo/name repo0) (:path file) (-> branch :commit :sha))))))
+      (handler (get-content-request (:org/name org0) (:repo/name repo0) (:path file) (:ref/sha branch0))))))
 
 (defspec get-content-supports-refs
   (prop/for-all
-   [{:keys [handler org0 repo0 file branch]} (gen/let [{:keys [repo0] :as database} (mock-gen/database {:repo [[1]]})
-                                                       branch (mock-gen/branch (:repo/jgit repo0) :num-commits 1)
-                                                       file (mock-gen/random-file (:repo/jgit repo0) (:name branch))]
-                                               (assoc database :branch branch :file file))]
+   [{:keys [handler org0 repo0 file branch0]} (gen/let [{:keys [repo0 branch0] :as database} (mock-gen/database {:branch [[1]]})
+                                                       file (mock-gen/random-file (:repo/jgit repo0) (:ref/sha branch0))]
+                                               (assoc database :file file))]
    (= {:status 200
        :body {:type "file"
               :path (:path file)
               :content (base64/encode (:content file) "UTF-8")}}
-      (handler (get-content-request (:org/name org0) (:repo/name repo0) (:path file) (:name branch))))))
+      (handler (get-content-request (:org/name org0) (:repo/name repo0) (:path file) (second (re-find #"refs/heads/(.*)" (:ref/ref branch0))))))))
 
 (defspec get-content-supports-default-branch
   (prop/for-all
    [{:keys [handler org0 repo0 file]} (gen/let [branch-name mock-gen/object-name
-                                                {:keys [repo0] :as database} (mock-gen/database {:repo [[1 {:spec-gen {:repo/attrs {:default_branch branch-name}}}]]})
-                                                _ (mock-gen/branch (:repo/jgit repo0) :name branch-name :num-commits 1)
-                                                file (mock-gen/random-file (:repo/jgit repo0) branch-name)]
+                                                {:keys [repo0 branch0] :as database} (mock-gen/database {:repo [[1 {:spec-gen {:repo/attrs {:default_branch branch-name}}}]]
+                                                                                                         :branch [[1 {:spec-gen {:ref/ref (str "refs/heads/" branch-name)}}]]})
+                                                file (mock-gen/random-file (:repo/jgit repo0) (:ref/sha branch0))]
                                         (assoc database :file file))]
    (= {:status 200
        :body {:type "file"

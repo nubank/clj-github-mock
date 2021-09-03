@@ -4,7 +4,8 @@
             [clojure.test :refer [deftest is]]
             [matcher-combinators.test :refer [match?]]
             [matcher-combinators.matchers :as matchers]
-            [datascript.core :as d]))
+            [datascript.core :as d]
+            [base64-clj.core :as base64]))
 
 (deftest repo-key-test
   (let [{:keys [org0 db]} (mock-gen/gen-ents {:org [[1]]})]
@@ -68,3 +69,37 @@
                :commit {:sha "some-sha"}}
               (repo/branch-body {:ref/ref "refs/heads/my-branch"
                                  :ref/sha "some-sha"}))))
+
+(deftest content-lookup-test
+  (let [{:keys [repo0 branch0 database]} (mock-gen/gen-ents {:branch [[1 {:spec-gen {:branch/content [{:path "some-file" :mode "100644" :type "blob" :content "some-content"}]}}]]})]
+    (is (= {:repo repo0
+            :sha (:ref/sha branch0)
+            :path "some-file"}
+           (repo/content-lookup {:repo repo0
+                                 :conn database
+                                 :path-params {:path "some-file"}
+                                 :query-params {"ref" (:ref/sha branch0)}})))
+    (is (= {:repo repo0
+            :sha (:ref/sha branch0)
+            :path "some-file"}
+           (repo/content-lookup {:repo repo0
+                                 :conn database
+                                 :path-params {:path "some-file"}
+                                 :query-params {"ref" (second (re-find #"refs/heads/(.*)" (:ref/ref branch0)))}})))
+    (is (nil? (repo/content-lookup {:repo repo0
+                                    :conn database
+                                    :path-params {:path "some-file"}
+                                    :query-params {"ref" "unknown-branch"}})))
+    (is (nil? (repo/content-lookup {:repo repo0
+                                    :conn database
+                                    :path-params {:path "unknown-file"}
+                                    :query-params {"ref" (:ref/sha branch0)}})))))
+
+(deftest content-body-test
+  (let [{:keys [repo0 branch0]} (mock-gen/gen-ents {:branch [[1 {:spec-gen {:branch/content [{:path "some-file" :mode "100644" :type "blob" :content "some-content"}]}}]]})]
+    (is (= {:type "file"
+            :path "some-file"
+            :content (base64/encode "some-content" "UTF-8")}
+           (repo/content-body {:repo repo0
+                               :sha (:ref/sha branch0)
+                               :path "some-file"})))))
