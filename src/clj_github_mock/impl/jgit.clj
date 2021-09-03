@@ -237,3 +237,6 @@
         tree-walk (TreeWalk/forPath ^ObjectReader reader ^String path (into-array AnyObjectId [tree-id]))
         object-id (when tree-walk (.getObjectId tree-walk 0))]
     (boolean object-id)))
+
+(defn object-exists? [repo sha]
+  (-> repo (.getObjectDatabase) (.has (ObjectId/fromString sha))))

@@ -6,20 +6,26 @@
 
 (def db-schema {:ref/repo+ref {:db/tupleAttrs [:ref/repo :ref/ref]
                                :db/unique :db.unique/identity}
-               :ref/repo {:db/type :db.type/ref}})
+                :ref/repo {:db/type :db.type/ref}})
+
+(defn tree-body [tree]
+  (jgit/get-tree (-> tree :tree/repo :repo/jgit) (:tree/sha tree)))
+
+(defn tree-lookup [{{:keys [sha]} :path-params
+                    {jgit-repo :repo/jgit :as repo} :repo}]
+  (when (jgit/object-exists? jgit-repo sha)
+    {:tree/repo repo
+     :tree/sha sha}))
+
+(defn tree-post [{{jgit-repo :repo/jgit :as repo} :repo
+                  body :body}]
+  {:tree/repo repo
+   :tree/sha (:sha (jgit/create-tree! jgit-repo body))})
 
 (def tree-resource
-  {:body-fn (fn [tree]
-              (jgit/get-tree (-> tree :tree/repo :repo/jgit) (:tree/sha tree)))
-   :lookup-fn (fn [{{:keys [sha]} :path-params
-                    {jgit-repo :repo/jgit :as repo} :repo}]
-                (when (jgit/get-tree jgit-repo sha)
-                  {:tree/repo repo
-                   :tree/sha sha}))
-   :post-fn (fn [{{jgit-repo :repo/jgit :as repo} :repo
-                  body :body}]
-              {:tree/repo repo
-               :tree/sha (:sha (jgit/create-tree! jgit-repo body))})
+  {:body-fn tree-body
+   :lookup-fn tree-lookup
+   :post-fn tree-post
    :post-schema [:map
                  [:path-params [:map
                                 [:org :string]
@@ -59,36 +65,35 @@
   [:ref/repo+ref [(d/entid db [:repo/name+org [repo (d/entid db [:org/name org])]]) (str "refs/" ref)]])
 
 ; TODO enforce update using jgit
-(def ref-resource { 
-   :body-fn (fn [ref]
-              {:ref (:ref/ref ref)
-               :object {:type :commit
-                        :sha (:ref/sha ref)}})
-   :lookup-fn (handlers/db-lookup-fn ref-key)
-   :post-fn (handlers/db-transact-fn (fn [db {{:keys [org repo]} :path-params
-                                              body :body}]
-                                       {:ref/repo [:repo/name+org [repo (d/entid db [:org/name org])]]
-                                        :ref/ref (:ref body)
-                                        :ref/sha (:sha body)}))
-   :post-schema [:map
-                 [:path-params [:map
-                                [:org :string]
-                                [:repo :string]]]
-                 [:body [:map
-                         [:ref :string]
-                         [:sha :string]]]]
-   :patch-fn (handlers/db-transact-fn (fn [db {{:keys [org repo ref]} :path-params
-                                               body :body}]
-                                        {:ref/repo+ref [(d/entid db [:repo/name+org [repo (d/entid db [:org/name org])]]) (str "refs/" ref)]
-                                         :ref/sha (:sha body)}))
-   :patch-schema [:map
-                  [:path-params [:map
-                                 [:org :string]
-                                 [:repo :string]
-                                 [:ref :string]]]
-                  [:body [:map
-                          [:sha :string]]]]
-   :delete-fn (handlers/db-delete-fn ref-key)})
+(def ref-resource {:body-fn (fn [ref]
+                              {:ref (:ref/ref ref)
+                               :object {:type :commit
+                                        :sha (:ref/sha ref)}})
+                   :lookup-fn (handlers/db-lookup-fn ref-key)
+                   :post-fn (handlers/db-transact-fn (fn [db {{:keys [org repo]} :path-params
+                                                              body :body}]
+                                                       {:ref/repo [:repo/name+org [repo (d/entid db [:org/name org])]]
+                                                        :ref/ref (:ref body)
+                                                        :ref/sha (:sha body)}))
+                   :post-schema [:map
+                                 [:path-params [:map
+                                                [:org :string]
+                                                [:repo :string]]]
+                                 [:body [:map
+                                         [:ref :string]
+                                         [:sha :string]]]]
+                   :patch-fn (handlers/db-transact-fn (fn [db {{:keys [org repo ref]} :path-params
+                                                               body :body}]
+                                                        {:ref/repo+ref [(d/entid db [:repo/name+org [repo (d/entid db [:org/name org])]]) (str "refs/" ref)]
+                                                         :ref/sha (:sha body)}))
+                   :patch-schema [:map
+                                  [:path-params [:map
+                                                 [:org :string]
+                                                 [:repo :string]
+                                                 [:ref :string]]]
+                                  [:body [:map
+                                          [:sha :string]]]]
+                   :delete-fn (handlers/db-delete-fn ref-key)})
 
 (def routes
   [["/repos/:org/:repo" {:middleware [repo/repo-middleware]}

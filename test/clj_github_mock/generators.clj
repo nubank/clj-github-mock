@@ -153,7 +153,7 @@
 
 (defn branch-transact [db branch]
   (let [git-repo (-> (d/entity db (:ref/repo branch)) :repo/jgit)
-        tree (jgit/create-tree! git-repo {:tree (or (:branch/content branch) [])})
+        tree (jgit/create-tree! git-repo {:tree (:branch/content branch)})
         commit (jgit/create-commit! git-repo {:tree (:sha tree)
                                               :message "initial commit"})]
     [(-> branch
