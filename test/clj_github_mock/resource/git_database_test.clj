@@ -31,3 +31,36 @@
                                         :body {:tree tree}})]
     (is (jgit/object-exists? (:repo/jgit (:tree/repo result)) (:tree/sha result)))))
 
+(deftest commit-body-test
+  (let [{:keys [repo0]} (mock-gen/gen-ents {:repo [[1]]})
+        commit0 (gen/generate (mock-gen/commit (:repo/jgit repo0)))
+        tree (gen/generate (mock-gen/tree (:repo/jgit repo0) (-> commit0 :tree :sha))) 
+        commit1 (jgit/create-commit! (:repo/jgit repo0) {:tree (:sha tree)
+                                                         :message "message"
+                                                         :parents [(:sha commit0)]})]
+    (is (= {:sha (:sha commit1)
+            :message "message"
+            :tree {:sha (:sha tree)}
+            :parents [{:sha (:sha commit0)}]}
+           (git-database/commit-body {:commit/repo repo0
+                                      :commit/sha (:sha commit1)})))))
+
+(deftest commit-lookup-test
+  (let [{:keys [repo0]} (mock-gen/gen-ents {:repo [[1]]})
+        {:keys [sha]} (gen/generate (mock-gen/commit (:repo/jgit repo0)))]
+    (is (= {:commit/repo repo0
+            :commit/sha sha}
+           (git-database/commit-lookup {:path-params {:sha sha}
+                                        :repo repo0})))
+    (is (nil? (git-database/commit-lookup {:path-params {:sha "6b584e8ece562ebffc15d38808cd6b98fc3d97ea"}
+                                           :repo repo0})))))
+
+(deftest commit-post-test
+  (let [{:keys [repo0]} (mock-gen/gen-ents {:repo [[1]]})
+        parent (gen/generate (mock-gen/commit (:repo/jgit repo0)))
+        tree (gen/generate (mock-gen/tree (:repo/jgit repo0) (-> parent :tree :sha)))
+        result (git-database/commit-post {:repo repo0
+                                          :body {:tree (:sha tree)
+                :message "message"
+                :parents [(:sha parent)]}})]
+    (is (jgit/object-exists? (:repo/jgit (:commit/repo result)) (:commit/sha result)))))

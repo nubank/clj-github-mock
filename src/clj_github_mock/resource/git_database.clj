@@ -40,18 +40,24 @@
                                   [:content {:optional true} :string]]]]
                          [:base_tree {:optional true} :string]]]]})
 
-(def commit-resource
-  {:body-fn (fn [commit]
-              (jgit/get-commit (-> commit :commit/repo :repo/jgit) (:commit/sha commit)))
-   :lookup-fn (fn [{{:keys [sha]} :path-params
+(defn commit-body [commit]
+  (jgit/get-commit (-> commit :commit/repo :repo/jgit) (:commit/sha commit)))
+
+(defn commit-lookup [{{:keys [sha]} :path-params
                     {jgit-repo :repo/jgit :as repo} :repo}]
-                (when (jgit/get-commit jgit-repo sha)
-                  {:commit/repo repo
-                   :commit/sha sha}))
-   :post-fn (fn [{{jgit-repo :repo/jgit :as repo} :repo
-                  body :body}]
-              {:commit/repo repo
-               :commit/sha (:sha (jgit/create-commit! jgit-repo body))})
+  (when (jgit/object-exists? jgit-repo sha)
+    {:commit/repo repo
+     :commit/sha sha}))
+
+(defn commit-post [{{jgit-repo :repo/jgit :as repo} :repo
+                    body :body}]
+  {:commit/repo repo
+   :commit/sha (:sha (jgit/create-commit! jgit-repo body))})
+
+(def commit-resource
+  {:body-fn commit-body
+   :lookup-fn commit-lookup
+   :post-fn commit-post
    :post-schema [:map
                  [:path-params [:map
                                 [:org :string]
