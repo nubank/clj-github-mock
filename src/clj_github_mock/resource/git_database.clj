@@ -44,7 +44,7 @@
   (jgit/get-commit (-> commit :commit/repo :repo/jgit) (:commit/sha commit)))
 
 (defn commit-lookup [{{:keys [sha]} :path-params
-                    {jgit-repo :repo/jgit :as repo} :repo}]
+                      {jgit-repo :repo/jgit :as repo} :repo}]
   (when (jgit/object-exists? jgit-repo sha)
     {:commit/repo repo
      :commit/sha sha}))
@@ -70,17 +70,25 @@
 (defn ref-key [db {{:keys [org repo ref]} :path-params}]
   [:ref/repo+ref [(d/entid db [:repo/name+org [repo (d/entid db [:org/name org])]]) (str "refs/" ref)]])
 
+(defn ref-body [ref]
+  {:ref (:ref/ref ref)
+   :object {:type :commit
+            :sha (:ref/sha ref)}})
+
+(defn ref-post [_ {:keys [repo body]}]
+  {:ref/repo (:db/id repo)
+   :ref/ref (:ref body)
+   :ref/sha (:sha body)})
+
+(defn ref-patch [_ {:keys [repo body]
+                    {:keys [ref]} :path-params}]
+  {:ref/repo+ref [(:db/id repo) (str "refs/" ref)]
+   :ref/sha (:sha body)})
+
 ; TODO enforce update using jgit
-(def ref-resource {:body-fn (fn [ref]
-                              {:ref (:ref/ref ref)
-                               :object {:type :commit
-                                        :sha (:ref/sha ref)}})
+(def ref-resource {:body-fn ref-body
                    :lookup-fn (handlers/db-lookup-fn ref-key)
-                   :post-fn (handlers/db-transact-fn (fn [db {{:keys [org repo]} :path-params
-                                                              body :body}]
-                                                       {:ref/repo [:repo/name+org [repo (d/entid db [:org/name org])]]
-                                                        :ref/ref (:ref body)
-                                                        :ref/sha (:sha body)}))
+                   :post-fn (handlers/db-transact-fn ref-post)
                    :post-schema [:map
                                  [:path-params [:map
                                                 [:org :string]
@@ -88,10 +96,7 @@
                                  [:body [:map
                                          [:ref :string]
                                          [:sha :string]]]]
-                   :patch-fn (handlers/db-transact-fn (fn [db {{:keys [org repo ref]} :path-params
-                                                               body :body}]
-                                                        {:ref/repo+ref [(d/entid db [:repo/name+org [repo (d/entid db [:org/name org])]]) (str "refs/" ref)]
-                                                         :ref/sha (:sha body)}))
+                   :patch-fn (handlers/db-transact-fn ref-patch)
                    :patch-schema [:map
                                   [:path-params [:map
                                                  [:org :string]

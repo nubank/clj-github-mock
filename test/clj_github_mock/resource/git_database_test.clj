@@ -64,3 +64,34 @@
                 :message "message"
                 :parents [(:sha parent)]}})]
     (is (jgit/object-exists? (:repo/jgit (:commit/repo result)) (:commit/sha result)))))
+
+(deftest ref-key-test
+  (let [{:keys [repo0 db]} (mock-gen/gen-ents {:repo [[1]]})]
+    (is (= [:ref/repo+ref [(:db/id repo0) "refs/heads/my-branch"]]
+           (git-database/ref-key db {:path-params {:org (-> repo0 :repo/org :org/name)
+                                                   :repo (:repo/name repo0)
+                                                   :ref "heads/my-branch"}})))))
+
+(deftest ref-body-test
+  (is (= {:ref "refs/heads/my-branch"
+          :object {:type :commit
+                   :sha "some-sha"}}
+         (git-database/ref-body {:ref/ref "refs/heads/my-branch"
+                                 :ref/sha "some-sha"}))))
+
+(deftest ref-post-test
+  (let [{:keys [repo0 db]} (mock-gen/gen-ents {:repo [[1]]})]
+    (is (= {:ref/repo (:db/id repo0)
+            :ref/ref "refs/heads/my-branch"
+            :ref/sha "some-sha"}
+           (git-database/ref-post db {:repo repo0
+                                      :body {:ref "refs/heads/my-branch"
+                                             :sha "some-sha"}})))))
+
+(deftest ref-patch-test
+  (let [{:keys [repo0 db]} (mock-gen/gen-ents {:repo [[1]]})]
+    (is (= {:ref/repo+ref [(:db/id repo0) "refs/heads/my-branch"]
+            :ref/sha "some-sha"}
+           (git-database/ref-patch db {:repo repo0
+                                       :path-params {:ref "heads/my-branch"}
+                                       :body {:sha "some-sha"}})))))
