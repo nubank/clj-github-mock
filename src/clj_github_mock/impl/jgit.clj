@@ -195,23 +195,6 @@
                       (.insert inserter commit-builder)))]
     (get-commit repo (ObjectId/toString commit-id))))
 
-(defn get-reference [repo ref-name]
-  (when-let [ref (.exactRef repo ref-name)]
-    {:ref ref-name
-     :object {:type "commit"
-              :sha (ObjectId/toString (.getObjectId ref))}}))
-
-(defn create-reference! [repo {:keys [ref sha]}]
-  (let [ref-update  (.updateRef repo ref)]
-    (doto ref-update
-      (.setNewObjectId (ObjectId/fromString sha))
-      (.update))
-    (get-reference repo ref)))
-
-(defn delete-reference! [repo ref]
-  (.delete
-   (doto (.updateRef repo ref) (.setForceUpdate true))))
-
 (defn get-branch [repo branch]
   (when-let [ref (.findRef repo branch)]
     (let [commit (get-commit repo (ObjectId/toString (.getObjectId ref)))]

@@ -65,10 +65,13 @@
                                               :branch "my-branch"}})))))
 
 (deftest branch-body-test
-  (is (match? {:name "my-branch"
-               :commit {:sha "some-sha"}}
-              (repo/branch-body {:ref/ref "refs/heads/my-branch"
-                                 :ref/sha "some-sha"}))))
+  (let [{:keys [repo0 branch0]} (mock-gen/gen-ents {:branch [[1 {:spec-gen {:ref/ref "refs/heads/my-branch"}}]]})]
+    (is (match? {:name "my-branch"
+                 :commit {:sha (:ref/sha branch0)
+                          :commit {:message string?
+                                   :tree {:sha string?}
+                                   :parents []}}}
+                (repo/branch-body branch0)))))
 
 (deftest content-lookup-test
   (let [{:keys [repo0 branch0 conn]} (mock-gen/gen-ents {:branch [[1 {:spec-gen {:branch/content [{:path "some-file" :mode "100644" :type "blob" :content "some-content"}]}}]]})]

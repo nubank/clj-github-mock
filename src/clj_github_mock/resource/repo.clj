@@ -71,7 +71,9 @@
 
 (defn branch-body [branch]
   {:name (string/replace (:ref/ref branch) "refs/heads/" "")
-   :commit {:sha (:ref/sha branch)}})
+   :commit {:sha (:ref/sha branch)
+            :commit (-> (jgit/get-commit (:repo/jgit (:ref/repo branch)) (:ref/sha branch))
+                        (dissoc :sha))}})
 
 (def branch-resource
   {:lookup-fn (handlers/db-lookup-fn branch-key)
