@@ -24,7 +24,7 @@
                                repo/db-schema
                                git-database/db-schema
                                db-schema))]
-    (d/transact! conn (datoms initial-state))
+    (d/transact! result (datoms initial-state))
     result))
 
 (defn conn-middleware [handler conn]

@@ -106,6 +106,12 @@
      (gen/let [new-tree (if tree (github-tree-changes tree) github-tree)]
        (jgit/create-tree! repo (assoc-some {:tree new-tree} :base_tree base-tree-sha))))))
 
+(defn gen-tree
+  ([repo]
+   (gen-tree repo nil))
+  ([repo base-tree-sha]
+   (gen/generate (tree repo base-tree-sha))))
+
 (defn commit
   "Creates a generator that given a jgit repository generates a commit in it.
   If passed the sha of a commit in the repository, generates a commit that
@@ -119,6 +125,12 @@
      (gen/let [tree (tree repo base-tree-sha)
                message gen/string]
        (jgit/create-commit! repo (assoc-some {:message message :tree (:sha tree)} :parents (when parent-commit-sha [parent-commit-sha])))))))
+
+(defn gen-commit
+  ([repo]
+   (gen-commit repo nil))
+  ([repo parent-commit-sha]
+   (gen/generate (commit repo parent-commit-sha))))
 
 (defn- branch-transact [db branch]
   (let [git-repo (-> (d/entity db (:ref/repo branch)) :repo/jgit)
@@ -205,12 +217,6 @@
     (zipmap ents
             (map (partial ent-data ent-db) ents))))
 
-(defn- ents-attrs-map [ent-db]
-  (let [ents-by-type (sm/ents-by-type ent-db)]
-    (zipmap (keys ents-by-type)
-            (map #(map (partial ent-data ent-db) %)
-                 (vals ents-by-type)))))
-
 (defn database
   "Creates a generator that given a specmonstah query generates a `clj-github-mock.database`.
   The `schema` var in this namespace contains the specmonstah schema used by this generator.
@@ -237,8 +243,7 @@
          {:conn conn
           :ent-db ent-db
           :db @conn
-          :ents (ents-attrs-map ent-db)}
-         (ent-attrs-map ent-db)))))))
+          :ents (ent-attrs-map ent-db)}))))))
 
 (defn gen-ents [query]
   (gen/generate (database query)))
