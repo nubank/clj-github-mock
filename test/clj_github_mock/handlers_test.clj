@@ -54,7 +54,19 @@
     (testing "validates request"
       (is (= {:status 422
               :body {:body {:name ["missing required key"]}}}
-             (handler {:body {:some-attr "some-value"}}))))))
+             (handler {:body {:some-attr "some-value"}})))))
+  (testing "catches ex-info"
+    (let [handler (handlers/post-handler {:post-fn (fn [_]
+                                                     (throw (ex-info "failure" {})))})]
+      (is (= {:status 422
+              :body {:error "failure"}}
+             (handler {})))))
+  (testing "does not catch other exceptions"
+    (let [handler (handlers/post-handler {:post-fn (fn [_]
+                                                     (throw (RuntimeException.)))})]
+      (is (thrown?
+           RuntimeException
+           (handler {}))))))
 
 (deftest get-handler-test
   (let [handler (handlers/get-handler {:body-fn identity
@@ -93,7 +105,21 @@
       (is (= {:status 422
               :body {:body {:attr1 ["missing required key"]}}}
              (handler {:path-params {:repo "my-repo"}
-                       :body {}}))))))
+                       :body {}})))))
+  (testing "catches ex-info"
+    (let [handler (handlers/patch-handler {:lookup-fn (constantly true)
+                                           :patch-fn (fn [_]
+                                                       (throw (ex-info "failure" {})))})]
+      (is (= {:status 422
+              :body {:error "failure"}}
+             (handler {})))))
+  (testing "does not catch other exceptions"
+    (let [handler (handlers/patch-handler {:lookup-fn (constantly true)
+                                           :patch-fn (fn [_]
+                                                       (throw (RuntimeException.)))})]
+      (is (thrown?
+           RuntimeException
+           (handler {}))))))
 
 (deftest list-handler-test
   (let [handler (handlers/list-handler {:list-fn (fn [_]
@@ -108,9 +134,14 @@
 
 (deftest delete-handler-test
   (let [repos (atom {"repo" {:attr "value"}})
-        handler (handlers/delete-handler {:delete-fn (fn [{{:keys [repo]} :path-params}]
+        handler (handlers/delete-handler {:lookup-fn (fn [{{:keys [repo]} :path-params}]
+                                                       (get @repos repo))
+                                          :delete-fn (fn [{{:keys [repo]} :path-params}]
                                                        (swap! repos dissoc repo))})]
     (testing "deletes entity"
       (is (= {:status 204}
              (handler {:path-params {:repo "repo"}})))
-      (is (empty? @repos)))))
+      (is (empty? @repos)))
+    (testing "404 if entity does not exist"
+      (is (= {:status 404}
+             (handler {:path-params {:repo "unknown"}}))))))

@@ -1,7 +1,8 @@
 (ns clj-github-mock.handlers
   (:require [datascript.core :as d]
             [malli.core :as m]
-            [malli.error :as me]))
+            [malli.error :as me])
+  (:import [clojure.lang ExceptionInfo]))
 
 (defn db-transact-fn [transaction-fn]
   (fn [{:keys [conn] :as request}]
@@ -30,9 +31,13 @@
     (let [error (-> (m/explain post-schema request)
                     (me/humanize))]
       (if-not error
-        (let [result (post-fn request)]
-          {:status 201
-           :body (body-fn result)})
+        (try
+          (let [result (post-fn request)]
+            {:status 201
+             :body (body-fn result)})
+          (catch ExceptionInfo e
+            {:status 422
+             :body {:error (ex-message e)}}))
         {:status 422
          :body error}))))
 
@@ -50,9 +55,13 @@
       (let [error (-> (m/explain patch-schema request)
                       (me/humanize))]
         (if-not error
-          (let [result (patch-fn request)]
-            {:status 200
-             :body (body-fn result)})
+          (try
+            (let [result (patch-fn request)]
+              {:status 200
+               :body (body-fn result)})
+            (catch ExceptionInfo e
+              {:status 422
+               :body {:error (ex-message e)}}))
           {:status 422
            :body error}))
       {:status 404})))
@@ -64,7 +73,10 @@
       {:status 200
        :body results})))
 
-(defn delete-handler [{:keys [delete-fn]}]
+(defn delete-handler [{:keys [lookup-fn delete-fn]}]
   (fn [request]
-    (delete-fn request)
-    {:status 204}))
+    (if (lookup-fn request)
+      (do
+        (delete-fn request)
+        {:status 204})
+      {:status 404})))
