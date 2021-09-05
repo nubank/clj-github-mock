@@ -3,7 +3,8 @@
             [clojure.string :as string]
             [datascript.core :as d]
             [clj-github-mock.handlers :as handlers]
-            [clj-github-mock.impl.jgit :as jgit]))
+            [clj-github-mock.impl.jgit :as jgit]
+            [base64-clj.core :as base64]))
 
 (def repo-defaults {:default_branch "main"})
 
@@ -99,8 +100,12 @@
        :sha  sha
        :path path})))
 
-(defn content-body [{{git-repo :repo/jgit} :repo :keys [path sha]}]
-  (jgit/get-content git-repo sha path))
+(defn content-body [{{git-repo :repo/jgit} :repo :keys [path sha]}] 
+  {:type "file"
+   :path path
+   :content (base64/encode
+             (jgit/get-content git-repo sha path)
+             "UTF-8")})
 
 (def content-resource
   {:lookup-fn content-lookup

@@ -79,8 +79,6 @@
    (let [repo (sut/empty-repo)
          {tree-sha :sha} (sut/create-tree! repo {:tree tree})
          {:keys [sha]} (sut/create-commit! repo {:tree tree-sha :message "test" :parents []})]
-     (every? #(= {:type "file"
-                  :path (:path %)
-                  :content (base64/encode (:content %) "UTF-8")}
+     (every? #(= (:content %)
                  (sut/get-content repo sha (:path %)))
              tree))))

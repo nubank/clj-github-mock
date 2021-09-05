@@ -194,25 +194,19 @@
                       (.insert inserter commit-builder)))]
     (get-commit repo (ObjectId/toString commit-id))))
 
-(defn get-content [repo sha path]
-  (let [reader (new-reader repo)
-        commit (RevCommit/parse (load-object reader (ObjectId/fromString sha)))
+(defn- object-id [reader sha path]
+  (let [commit (RevCommit/parse (load-object reader (ObjectId/fromString sha)))
         tree-id (-> commit (.getTree) (.getId))
-        tree-walk (TreeWalk/forPath ^ObjectReader reader ^String path (into-array AnyObjectId [tree-id]))
-        object-id (when tree-walk (.getObjectId tree-walk 0))]
-    (when object-id
-      (let [content (String. (load-object reader object-id) "UTF-8")]
-        {:type "file"
-         :path path
-         :content (base64/encode content "UTF-8")}))))
+        tree-walk (TreeWalk/forPath ^ObjectReader reader ^String path (into-array AnyObjectId [tree-id]))]
+    (when tree-walk (.getObjectId tree-walk 0))))
+
+(defn get-content [repo sha path]
+  (let [reader (new-reader repo)]
+    (when-let [id (object-id repo sha path)]
+      (String. (load-object reader id) "UTF-8"))))
 
 (defn path-exists? [repo sha path]
-  (let [reader (new-reader repo)
-        commit (RevCommit/parse (load-object reader (ObjectId/fromString sha)))
-        tree-id (-> commit (.getTree) (.getId))
-        tree-walk (TreeWalk/forPath ^ObjectReader reader ^String path (into-array AnyObjectId [tree-id]))
-        object-id (when tree-walk (.getObjectId tree-walk 0))]
-    (boolean object-id)))
+  (boolean (object-id (new-reader repo) sha path)))
 
 (defn object-exists? [repo sha]
   (-> repo (.getObjectDatabase) (.has (ObjectId/fromString sha))))
