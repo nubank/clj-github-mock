@@ -254,7 +254,7 @@
   (gen/->Generator
    (fn [rnd size]
      (let [the-schema (schema)
-           database (resource/conn {:db-schema (->> (vals the-schema)
+           conn (resource/conn {:db-schema (->> (vals the-schema)
                                                     (map :db-schema)
                                                     (remove nil?)
                                                     (apply merge))})
@@ -262,13 +262,12 @@
                                          :gen-options {:rnd-state (atom rnd)
                                                        :size size}}
                                         query)
-                      (sm/visit-ents-once :inserted-data (partial insert database)))]
+                      (sm/visit-ents-once :inserted-data (partial insert conn)))]
        (rose/pure
         (merge
-         {:handler (resource/handler database)
-          :database database
+         {:conn conn
           :ent-db ent-db
-          :db @database
+          :db @conn
           :ents (ents-attrs-map ent-db)}
          (ent-attrs-map ent-db)))))))
 

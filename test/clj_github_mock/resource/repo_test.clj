@@ -71,27 +71,27 @@
                                  :ref/sha "some-sha"}))))
 
 (deftest content-lookup-test
-  (let [{:keys [repo0 branch0 database]} (mock-gen/gen-ents {:branch [[1 {:spec-gen {:branch/content [{:path "some-file" :mode "100644" :type "blob" :content "some-content"}]}}]]})]
+  (let [{:keys [repo0 branch0 conn]} (mock-gen/gen-ents {:branch [[1 {:spec-gen {:branch/content [{:path "some-file" :mode "100644" :type "blob" :content "some-content"}]}}]]})]
     (is (= {:repo repo0
             :sha (:ref/sha branch0)
             :path "some-file"}
            (repo/content-lookup {:repo repo0
-                                 :conn database
+                                 :conn conn
                                  :path-params {:path "some-file"}
                                  :query-params {"ref" (:ref/sha branch0)}})))
     (is (= {:repo repo0
             :sha (:ref/sha branch0)
             :path "some-file"}
            (repo/content-lookup {:repo repo0
-                                 :conn database
+                                 :conn conn
                                  :path-params {:path "some-file"}
                                  :query-params {"ref" (second (re-find #"refs/heads/(.*)" (:ref/ref branch0)))}})))
     (is (nil? (repo/content-lookup {:repo repo0
-                                    :conn database
+                                    :conn conn
                                     :path-params {:path "some-file"}
                                     :query-params {"ref" "unknown-branch"}})))
     (is (nil? (repo/content-lookup {:repo repo0
-                                    :conn database
+                                    :conn conn
                                     :path-params {:path "unknown-file"}
                                     :query-params {"ref" (:ref/sha branch0)}})))))
 
