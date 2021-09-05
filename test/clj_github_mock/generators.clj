@@ -72,6 +72,9 @@
       [(assoc map-tree :path root-name)]
       (map-tree->github-tree map-tree))))
 
+(defn gen-github-tree []
+  (gen/generate github-tree))
+
 (defn- update-gen [github-tree]
   (gen/let [item (gen/elements github-tree)
             new-content (gen/not-empty gen/string)]
@@ -104,7 +107,8 @@
    (let [{:keys [tree]} (when base-tree-sha
                           (jgit/get-flatten-tree repo base-tree-sha))]
      (gen/let [new-tree (if tree (github-tree-changes tree) github-tree)]
-       (jgit/create-tree! repo (assoc-some {:tree new-tree} :base_tree base-tree-sha))))))
+       (let [sha (jgit/create-tree! repo (assoc-some {:tree new-tree} :base_tree base-tree-sha))]
+         (jgit/get-tree repo sha))))))
 
 (defn gen-tree
   ([repo]
@@ -135,8 +139,8 @@
 
 (defn- branch-transact [db branch]
   (let [git-repo (-> (d/entity db (:ref/repo branch)) :repo/jgit)
-        tree (jgit/create-tree! git-repo {:tree (:branch/content branch)})
-        sha (jgit/create-commit! git-repo {:tree (:sha tree)
+        tree-sha (jgit/create-tree! git-repo {:tree (:branch/content branch)})
+        sha (jgit/create-commit! git-repo {:tree tree-sha
                                            :message "initial commit"})]
     [(-> branch
          (assoc :ref/sha sha)

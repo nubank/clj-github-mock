@@ -20,7 +20,7 @@
 (defn tree-post [{{jgit-repo :repo/jgit :as repo} :repo
                   body :body}]
   {:tree/repo repo
-   :tree/sha (:sha (jgit/create-tree! jgit-repo body))})
+   :tree/sha (jgit/create-tree! jgit-repo body)})
 
 (def tree-resource
   {:body-fn tree-body

@@ -2,14 +2,13 @@
   (:require [clj-github-mock.resource.git-database :as git-database]
             [clojure.test :refer [deftest is]]
             [clj-github-mock.generators :as mock-gen]
-            [clj-github-mock.impl.jgit :as jgit]
-            [clojure.test.check.generators :as gen])
+            [clj-github-mock.impl.jgit :as jgit])
   (:import [clojure.lang ExceptionInfo]))
 
 (deftest tree-body-test
   (let [{{:keys [repo0]} :ents} (mock-gen/gen-ents {:repo [[1]]})
-        {:keys [sha]} (jgit/create-tree! (:repo/jgit repo0)
-                                         {:tree [{:path "some-file" :type "blob" :mode "100644" :content "content"}]})]
+        sha (jgit/create-tree! (:repo/jgit repo0)
+                               {:tree [{:path "some-file" :type "blob" :mode "100644" :content "content"}]})]
     (is (= {:sha sha
             :tree [{:path "some-file" :type "blob" :mode "100644" :sha "6b584e8ece562ebffc15d38808cd6b98fc3d97ea"}]}
            (git-database/tree-body {:tree/repo repo0
@@ -27,7 +26,7 @@
 
 (deftest tree-post-test
   (let [{{:keys [repo0]} :ents} (mock-gen/gen-ents {:repo [[1]]})
-        tree (gen/generate mock-gen/github-tree)
+        tree (mock-gen/gen-github-tree)
         result (git-database/tree-post {:repo repo0
                                         :body {:tree tree}})]
     (is (jgit/object-exists? (:repo/jgit (:tree/repo result)) (:tree/sha result)))))
@@ -37,8 +36,8 @@
         commit0 (mock-gen/gen-commit (:repo/jgit repo0))
         tree (mock-gen/gen-tree (:repo/jgit repo0) (-> commit0 :tree :sha))
         sha (jgit/create-commit! (:repo/jgit repo0) {:tree (:sha tree)
-                                                         :message "message"
-                                                         :parents [(:sha commit0)]})]
+                                                     :message "message"
+                                                     :parents [(:sha commit0)]})]
     (is (= {:sha sha
             :message "message"
             :tree {:sha (:sha tree)}

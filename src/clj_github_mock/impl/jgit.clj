@@ -155,9 +155,8 @@
 (defn create-tree! [repo {:keys [tree base_tree]}]
   (let [final-tree (-> (tree-items->tree-map tree)
                        (tree-map->tree-items repo base_tree))]
-    (let [sha (with-inserter [inserter repo]
-                (ObjectId/toString (insert-tree repo inserter final-tree base_tree)))]
-      (get-tree repo sha))))
+    (with-inserter [inserter repo]
+      (ObjectId/toString (insert-tree repo inserter final-tree base_tree)))))
 
 ;; only for testing - start
 (declare tree-content)
@@ -184,15 +183,14 @@
      :parents (mapv #(hash-map :sha (ObjectId/toString (.getId %))) (.getParents commit))}))
 
 (defn create-commit! [repo {:keys [tree message parents]}]
-  (let [commit-id (with-inserter [inserter repo]
-                    (let [commit-builder (doto (CommitBuilder.)
-                                           (.setMessage message)
-                                           (.setTreeId (ObjectId/fromString tree))
-                                           (.setAuthor (PersonIdent. "me" "me@example.com"))
-                                           (.setCommitter (PersonIdent. "me" "me@example.com"))
-                                           (.setParentIds (into-array ObjectId (map #(ObjectId/fromString %) parents))))]
-                      (.insert inserter commit-builder)))]
-    (ObjectId/toString commit-id)))
+  (with-inserter [inserter repo]
+    (let [commit-builder (doto (CommitBuilder.)
+                           (.setMessage message)
+                           (.setTreeId (ObjectId/fromString tree))
+                           (.setAuthor (PersonIdent. "me" "me@example.com"))
+                           (.setCommitter (PersonIdent. "me" "me@example.com"))
+                           (.setParentIds (into-array ObjectId (map #(ObjectId/fromString %) parents))))]
+      (ObjectId/toString (.insert inserter commit-builder)))))
 
 (defn- object-id [reader sha path]
   (let [commit (RevCommit/parse (load-object reader (ObjectId/fromString sha)))
