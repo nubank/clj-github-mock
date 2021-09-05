@@ -1,6 +1,5 @@
 (ns clj-github-mock.impl.jgit
-  (:require [base64-clj.core :as base64]
-            [clojure.set :as set]
+  (:require [clojure.set :as set]
             [clojure.string :as string])
   (:import [org.eclipse.jgit.internal.storage.dfs DfsRepositoryDescription InMemoryRepository]
            [org.eclipse.jgit.lib AnyObjectId CommitBuilder Constants FileMode ObjectId ObjectReader PersonIdent TreeFormatter]
