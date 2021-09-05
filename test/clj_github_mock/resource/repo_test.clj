@@ -4,7 +4,6 @@
             [clojure.test :refer [deftest is]]
             [matcher-combinators.test :refer [match?]]
             [matcher-combinators.matchers :as matchers]
-            [datascript.core :as d]
             [base64-clj.core :as base64]))
 
 (deftest repo-key-test
