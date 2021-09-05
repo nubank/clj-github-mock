@@ -9,18 +9,13 @@
              [matcher-combinators.matchers :as matchers]
              [matcher-combinators.standalone :refer [match?]]))
 
-(defn decode-base64 [content]
-  (if (empty? content)
-    content
-    (base64/decode content "UTF-8")))
-
 (defspec blob-is-added-to-repo
   (prop/for-all
    [content gen/string]
    (let [repo (sut/empty-repo)
-         {:keys [sha]} (sut/create-blob! repo {:content content})]
+         sha (sut/create-blob! repo content)]
      (= content
-        (decode-base64 (:content (sut/get-blob repo sha)))))))
+        (sut/get-blob repo sha)))))
 
 (defspec tree-is-added-to-repo
   (prop/for-all
@@ -40,7 +35,7 @@
   (->> changes
        (mapv (fn [{:keys [path content]}]
                (if content
-                 [(into (sut/split-path path) [:content]) :r (base64/encode content "UTF-8")]
+                 [(sut/split-path path) :r content]
                  [(sut/split-path path) :-])))
        (editscript/edits->script)))
 

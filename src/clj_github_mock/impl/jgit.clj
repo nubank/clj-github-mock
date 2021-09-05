@@ -30,14 +30,13 @@
 (defn- insert-blob [inserter {:keys [content]}]
   (.insert inserter Constants/OBJ_BLOB (.getBytes content "UTF-8")))
 
-(defn create-blob! [repo blob]
+(defn create-blob! [repo content]
   (with-inserter [inserter repo]
-    (let [object-id (insert-blob inserter blob)]
-      {:sha (ObjectId/toString object-id)})))
+    (let [object-id (insert-blob inserter {:content content})]
+      (ObjectId/toString object-id))))
 
 (defn get-blob [repo sha]
-  (let [content (String. (load-object (new-reader repo) (ObjectId/fromString sha)) "UTF-8")]
-    {:content (base64/encode content "UTF-8")}))
+  (String. (load-object (new-reader repo) (ObjectId/fromString sha)) "UTF-8"))
 
 (def ^:private github-mode->file-mode {"100644" FileMode/REGULAR_FILE
                                        "100755" FileMode/EXECUTABLE_FILE
@@ -143,8 +142,8 @@
     (mapcat (fn [{:keys [path type sha] :as tree-item}]
               (if (= "tree" type)
                 (flatten-tree repo sha (concat-path base-path path))
-                [(-> (merge tree-item (get-blob repo (:sha tree-item)))
-                     (update :content #(if (string/blank? %) % (base64/decode %)))
+                [(-> tree-item
+                     (assoc :content (get-blob repo (:sha tree-item)))
                      (update :path (partial concat-path base-path))
                      (dissoc :sha))]))
             tree)))
