@@ -120,38 +120,7 @@
                message gen/string]
        (jgit/create-commit! repo (assoc-some {:message message :tree (:sha tree)} :parents (when parent-commit-sha [parent-commit-sha])))))))
 
-(defn- commit-history [repo base-commit num-commits]
-  (if (= 0 num-commits)
-    (gen/return base-commit)
-    (gen/let [next-commit (commit repo (:sha base-commit))]
-      (commit-history repo next-commit (dec num-commits)))))
-
-(defn branch
-  "Creates a generator that given a jgit repository generates in it a branch pointing to a sequence of commits.
-  The generator can be customized with the following options:
-  - `:name`: the name of the branch, if not set a random name is generated
-  - `num-commits`: the number of commits to be generated, if not set a random number of commits is generated
-  - `base-branch`: the generated branch will be derived from the base-branch, if not set an orphan branch is generated
-
-  Note: the generator is not purely functional since a jgit repository is mutable"
-  [repo & {:keys [name num-commits base-branch]}]
-  (gen/let [branch-name (if name (gen/return name) object-name)
-            num-commits (if num-commits (gen/return num-commits) (gen/fmap inc (gen/scale #(/ % 10) gen/nat)))
-            last-commit (commit-history repo (when base-branch (-> (jgit/get-branch repo base-branch) :commit)) num-commits)]
-    (jgit/create-reference! repo {:ref (str "refs/heads/" branch-name) :sha (:sha last-commit)})
-    (jgit/get-branch repo branch-name)))
-
-(defn random-file
-  "Creates a generator that given a jgit repository and the sha of a commit and randomly selects a file contained in that commit.
-  The file is returned as a github tree object.
-
-  Note: the generator is not purely functional since a jgit repository is mutable"
-  [repo sha]
-  (let [commit (jgit/get-commit repo sha)
-        {:keys [tree]} (jgit/get-flatten-tree repo (-> commit :tree :sha))]
-    (gen/elements tree)))
-
-(defn branch-transact [db branch]
+(defn- branch-transact [db branch]
   (let [git-repo (-> (d/entity db (:ref/repo branch)) :repo/jgit)
         tree (jgit/create-tree! git-repo {:tree (:branch/content branch)})
         commit (jgit/create-commit! git-repo {:tree (:sha tree)
