@@ -56,7 +56,7 @@
     message gen/string]
    (let [repo (sut/empty-repo)
          {tree-sha :sha} (sut/create-tree! repo {:tree tree})
-         {:keys [sha]} (sut/create-commit! repo {:tree tree-sha :message message :parents []})]
+         sha (sut/create-commit! repo {:tree tree-sha :message message :parents []})]
      (match? {:sha sha
               :message message}
              (sut/get-commit repo sha)))))
@@ -67,9 +67,9 @@
     message gen/string]
    (let [repo (sut/empty-repo)
          {parent-tree-sha :sha} (sut/create-tree! repo {:tree tree})
-         {parent-sha :sha} (sut/create-commit! repo {:tree parent-tree-sha :message message :parents []})
+         parent-sha (sut/create-commit! repo {:tree parent-tree-sha :message message :parents []})
          {tree-sha :sha} (sut/create-tree! repo {:tree changes :base_tree parent-tree-sha})
-         {:keys [sha]} (sut/create-commit! repo {:tree tree-sha :message message :parents [parent-sha]})]
+         sha (sut/create-commit! repo {:tree tree-sha :message message :parents [parent-sha]})]
      (= (sut/get-commit repo parent-sha)
         (sut/get-commit repo (get-in (sut/get-commit repo sha) [:parents 0 :sha]))))))
 
@@ -78,7 +78,7 @@
    [tree mock-gen/github-tree]
    (let [repo (sut/empty-repo)
          {tree-sha :sha} (sut/create-tree! repo {:tree tree})
-         {:keys [sha]} (sut/create-commit! repo {:tree tree-sha :message "test" :parents []})]
+         sha (sut/create-commit! repo {:tree tree-sha :message "test" :parents []})]
      (every? #(= (:content %)
                  (sut/get-content repo sha (:path %)))
              tree))))

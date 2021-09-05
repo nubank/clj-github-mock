@@ -192,7 +192,7 @@
                                            (.setCommitter (PersonIdent. "me" "me@example.com"))
                                            (.setParentIds (into-array ObjectId (map #(ObjectId/fromString %) parents))))]
                       (.insert inserter commit-builder)))]
-    (get-commit repo (ObjectId/toString commit-id))))
+    (ObjectId/toString commit-id)))
 
 (defn- object-id [reader sha path]
   (let [commit (RevCommit/parse (load-object reader (ObjectId/fromString sha)))

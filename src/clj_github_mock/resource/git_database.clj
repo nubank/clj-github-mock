@@ -52,7 +52,7 @@
 (defn commit-post [{{jgit-repo :repo/jgit :as repo} :repo
                     body :body}]
   {:commit/repo repo
-   :commit/sha (:sha (jgit/create-commit! jgit-repo body))})
+   :commit/sha (jgit/create-commit! jgit-repo body)})
 
 (def commit-resource
   {:body-fn commit-body

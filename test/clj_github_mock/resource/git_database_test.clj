@@ -36,15 +36,15 @@
   (let [{{:keys [repo0]} :ents} (mock-gen/gen-ents {:repo [[1]]})
         commit0 (mock-gen/gen-commit (:repo/jgit repo0))
         tree (mock-gen/gen-tree (:repo/jgit repo0) (-> commit0 :tree :sha))
-        commit1 (jgit/create-commit! (:repo/jgit repo0) {:tree (:sha tree)
+        sha (jgit/create-commit! (:repo/jgit repo0) {:tree (:sha tree)
                                                          :message "message"
                                                          :parents [(:sha commit0)]})]
-    (is (= {:sha (:sha commit1)
+    (is (= {:sha sha
             :message "message"
             :tree {:sha (:sha tree)}
             :parents [{:sha (:sha commit0)}]}
            (git-database/commit-body {:commit/repo repo0
-                                      :commit/sha (:sha commit1)})))))
+                                      :commit/sha sha})))))
 
 (deftest commit-lookup-test
   (let [{{:keys [repo0]} :ents} (mock-gen/gen-ents {:repo [[1]]})

@@ -124,7 +124,8 @@
    (let [base-tree-sha (when parent-commit-sha (-> (jgit/get-commit repo parent-commit-sha) :tree :sha))]
      (gen/let [tree (tree repo base-tree-sha)
                message gen/string]
-       (jgit/create-commit! repo (assoc-some {:message message :tree (:sha tree)} :parents (when parent-commit-sha [parent-commit-sha])))))))
+       (let [sha (jgit/create-commit! repo (assoc-some {:message message :tree (:sha tree)} :parents (when parent-commit-sha [parent-commit-sha])))]
+         (jgit/get-commit repo sha))))))
 
 (defn gen-commit
   ([repo]
@@ -135,10 +136,10 @@
 (defn- branch-transact [db branch]
   (let [git-repo (-> (d/entity db (:ref/repo branch)) :repo/jgit)
         tree (jgit/create-tree! git-repo {:tree (:branch/content branch)})
-        commit (jgit/create-commit! git-repo {:tree (:sha tree)
-                                              :message "initial commit"})]
+        sha (jgit/create-commit! git-repo {:tree (:sha tree)
+                                           :message "initial commit"})]
     [(-> branch
-         (assoc :ref/sha (:sha commit))
+         (assoc :ref/sha sha)
          (dissoc :branch/content))]))
 
 (defn- schema []
