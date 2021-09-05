@@ -3,7 +3,8 @@
             [clojure.test :refer [deftest is]]
             [clj-github-mock.generators :as mock-gen]
             [clj-github-mock.impl.jgit :as jgit]
-            [clojure.test.check.generators :as gen]))
+            [clojure.test.check.generators :as gen])
+  (:import [clojure.lang ExceptionInfo]))
 
 (deftest tree-body-test
   (let [{:keys [repo0]} (mock-gen/gen-ents {:repo [[1]]})
@@ -34,7 +35,7 @@
 (deftest commit-body-test
   (let [{:keys [repo0]} (mock-gen/gen-ents {:repo [[1]]})
         commit0 (gen/generate (mock-gen/commit (:repo/jgit repo0)))
-        tree (gen/generate (mock-gen/tree (:repo/jgit repo0) (-> commit0 :tree :sha))) 
+        tree (gen/generate (mock-gen/tree (:repo/jgit repo0) (-> commit0 :tree :sha)))
         commit1 (jgit/create-commit! (:repo/jgit repo0) {:tree (:sha tree)
                                                          :message "message"
                                                          :parents [(:sha commit0)]})]
@@ -61,8 +62,8 @@
         tree (gen/generate (mock-gen/tree (:repo/jgit repo0) (-> parent :tree :sha)))
         result (git-database/commit-post {:repo repo0
                                           :body {:tree (:sha tree)
-                :message "message"
-                :parents [(:sha parent)]}})]
+                                                 :message "message"
+                                                 :parents [(:sha parent)]}})]
     (is (jgit/object-exists? (:repo/jgit (:commit/repo result)) (:commit/sha result)))))
 
 (deftest ref-key-test
@@ -89,9 +90,23 @@
                                              :sha "some-sha"}})))))
 
 (deftest ref-patch-test
-  (let [{:keys [repo0 db]} (mock-gen/gen-ents {:repo [[1]]})]
+  (let [{:keys [repo0 branch0 db]} (mock-gen/gen-ents {:branch [[1 {:spec-gen {:ref/ref "refs/heads/my-branch"}}]]})
+        {:keys [sha]} (gen/generate (mock-gen/commit (:repo/jgit repo0) (:ref/sha branch0)))]
     (is (= {:ref/repo+ref [(:db/id repo0) "refs/heads/my-branch"]
-            :ref/sha "some-sha"}
+            :ref/sha sha}
            (git-database/ref-patch db {:repo repo0
                                        :path-params {:ref "heads/my-branch"}
-                                       :body {:sha "some-sha"}})))))
+                                       :body {:sha sha}})))
+    (let [{:keys [sha]} (gen/generate (mock-gen/commit (:repo/jgit repo0)))]
+      (is (thrown?
+           ExceptionInfo
+           (git-database/ref-patch db {:repo repo0
+                                       :path-params {:ref "heads/my-branch"}
+                                       :body {:sha sha}}))))
+    (let [{:keys [sha]} (gen/generate (mock-gen/commit (:repo/jgit repo0)))]
+      (is (= {:ref/repo+ref [(:db/id repo0) "refs/heads/my-branch"]
+              :ref/sha sha}
+             (git-database/ref-patch db {:repo repo0
+                                         :path-params {:ref "heads/my-branch"}
+                                         :body {:sha sha
+                                                :force true}}))))))

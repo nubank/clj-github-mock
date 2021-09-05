@@ -80,12 +80,17 @@
    :ref/ref (:ref body)
    :ref/sha (:sha body)})
 
-(defn ref-patch [_ {:keys [repo body]
+(defn ref-patch [db {:keys [repo body]
                     {:keys [ref]} :path-params}]
-  {:ref/repo+ref [(:db/id repo) (str "refs/" ref)]
-   :ref/sha (:sha body)})
+  (let [key [(:db/id repo) (str "refs/" ref)]
+        current-sha (-> (d/entity db [:ref/repo+ref key]) :ref/sha)
+        new-sha (:sha body)
+        base (jgit/merge-base (:repo/jgit repo) current-sha new-sha)]
+    (if (or (:force body) (= current-sha base))
+      {:ref/repo+ref key
+       :ref/sha (:sha body)}
+      (throw (ex-info "not fast forward" {})))))
 
-; TODO enforce update using jgit
 (def ref-resource {:body-fn ref-body
                    :lookup-fn (handlers/db-lookup-fn ref-key)
                    :post-fn (handlers/db-transact-fn ref-post)

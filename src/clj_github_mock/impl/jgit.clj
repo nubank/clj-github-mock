@@ -4,7 +4,8 @@
             [clojure.string :as string])
   (:import [org.eclipse.jgit.internal.storage.dfs DfsRepositoryDescription InMemoryRepository]
            [org.eclipse.jgit.lib AnyObjectId CommitBuilder Constants FileMode ObjectId ObjectReader PersonIdent TreeFormatter]
-           [org.eclipse.jgit.revwalk RevCommit]
+           [org.eclipse.jgit.revwalk RevCommit RevWalk]
+           [org.eclipse.jgit.revwalk.filter RevFilter]
            [org.eclipse.jgit.treewalk TreeWalk]))
 
 (defn empty-repo []
@@ -240,3 +241,15 @@
 
 (defn object-exists? [repo sha]
   (-> repo (.getObjectDatabase) (.has (ObjectId/fromString sha))))
+
+(defn merge-base [repo sha1 sha2]
+  (let [rev-walk (RevWalk. repo)
+        commit1 (.parseCommit rev-walk (ObjectId/fromString sha1))
+        commit2 (.parseCommit rev-walk (ObjectId/fromString sha2))
+        _ (doto rev-walk
+            (.setRevFilter RevFilter/MERGE_BASE)
+            (.markStart commit1)
+            (.markStart commit2))
+        base (.next rev-walk)]
+    (when (and base (nil? (.next rev-walk)))
+      (-> base (.toObjectId) (ObjectId/toString)))))
