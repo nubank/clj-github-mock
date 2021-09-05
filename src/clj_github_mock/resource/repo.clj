@@ -73,7 +73,6 @@
   {:name (string/replace (:ref/ref branch) "refs/heads/" "")
    :commit {:sha (:ref/sha branch)}})
 
-; TODO complete commit object
 (def branch-resource
   {:lookup-fn (handlers/db-lookup-fn branch-key)
    :body-fn branch-body})
