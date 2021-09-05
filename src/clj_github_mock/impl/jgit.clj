@@ -195,13 +195,6 @@
                       (.insert inserter commit-builder)))]
     (get-commit repo (ObjectId/toString commit-id))))
 
-(defn get-branch [repo branch]
-  (when-let [ref (.findRef repo branch)]
-    (let [commit (get-commit repo (ObjectId/toString (.getObjectId ref)))]
-      {:name branch
-       :commit {:sha (:sha commit)
-                :commit (dissoc commit :sha)}})))
-
 (defn get-content [repo sha path]
   (let [reader (new-reader repo)
         commit (RevCommit/parse (load-object reader (ObjectId/fromString sha)))
