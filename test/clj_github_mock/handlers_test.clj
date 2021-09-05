@@ -1,6 +1,43 @@
 (ns clj-github-mock.handlers-test
   (:require [clj-github-mock.handlers :as handlers]
-            [clojure.test :refer [deftest is testing]]))
+            [clojure.test :refer [deftest is testing]]
+            [datascript.core :as d]))
+
+(deftest db-transact-fn-test
+  (let [conn (d/create-conn {:db/ident {:db/unique :db.unique/identity}})
+        transaction-fn (fn [_ {:keys [body]}]
+                         {:db/ident :entity
+                          :body body})
+        transact-fn (handlers/db-transact-fn transaction-fn)
+        result (transact-fn {:conn conn
+                             :body "body"})
+        expected (d/entity @conn [:db/ident :entity])]
+    (is (= expected result))))
+
+(deftest db-lookup-fn-test
+  (let [conn (d/create-conn {:db/ident {:db/unique :db.unique/identity}})
+        key-fn (fn [_ {:keys [key]}] key)
+        lookup-fn (handlers/db-lookup-fn key-fn)]
+    (d/transact! conn [{:db/ident :entity}])
+    (is (= (d/entity @conn [:db/ident :entity])
+           (lookup-fn {:conn conn
+                       :key [:db/ident :entity]})))))
+
+(deftest db-list-fn-test
+  (let [conn (d/create-conn {})
+        query-fn (fn [db request]
+                   [db request])
+        list-fn (handlers/db-list-fn query-fn)]
+    (is (= [@conn {:conn conn}]
+           (list-fn {:conn conn})))))
+
+(deftest db-delete-fn-test
+  (let [conn (d/create-conn {:db/ident {:db/unique :db.unique/identity}})
+        key-fn (fn [_ {:keys [key]}] key)
+        delete-fn (handlers/db-delete-fn key-fn)]
+    (d/transact conn [{:db/ident :entity}])
+    (delete-fn {:conn conn :key [:db/ident :entity]})
+    (is (nil? (d/entity @conn [:db/ident :entity])))))
 
 (deftest post-handler-test
   (let [handler (handlers/post-handler {:post-fn :body 
