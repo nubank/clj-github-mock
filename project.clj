@@ -1,4 +1,4 @@
-(defproject dev.nubank/clj-github-mock "0.2.0"
+(defproject dev.nubank/clj-github-mock "0.3.0-SNAPSHOT"
   :description "An emulator of the github api"
   :url "https://github.com/nubank/clj-github-mock"
   :license {:name "EPL-2.0 OR GPL-2.0-or-later WITH Classpath-exception-2.0"
@@ -23,18 +23,21 @@
                  [base64-clj "0.1.1"]
                  [ring/ring-json "0.5.1"]
                  [ring/ring-mock "0.4.0"]
-                 [datascript "1.1.0"]]
+                 [datascript "1.1.0"]
+                 [metosin/malli "0.4.0"]
+                 [reifyhealth/specmonstah "2.0.0"]
+                 [org.clojure/test.check "1.1.0"]
+                 [medley "1.3.0"]
+                 [lambdaisland/regal "0.0.97"]
+                 [nubank/state-flow "5.13.3"]
+                 [http-kit.fake "0.2.1"]
+                 [http-kit "2.5.3"]]
 
   :profiles {:dev {:plugins [[lein-project-version "0.1.0"]]
                    :dependencies [[clj-http "3.12.1"]
                                   [clj-http-fake "1.0.3"]
-                                  [org.clojure/test.check "1.1.0"]
                                   [nubank/matcher-combinators "3.1.4"]
-                                  [metosin/malli "0.4.0"]
-                                  [lambdaisland/regal "0.0.97"]
-                                  [juji/editscript "0.5.7"]
-                                  [reifyhealth/specmonstah "2.0.0"]
-                                  [medley "1.3.0"]]}}
+                                  [juji/editscript "0.5.7"]]}}
 
   :aliases {"coverage" ["cloverage" "-s" "coverage"]
             "lint"     ["do" ["cljfmt" "check"] ["nsorg"]]

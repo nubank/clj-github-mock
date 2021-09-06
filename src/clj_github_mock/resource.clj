@@ -4,7 +4,8 @@
             [clj-github-mock.resource.git-database :as git-database]
             [ring.middleware.params :as middleware.params]
             [reitit.ring :as ring]
-            [datascript.core :as d]))
+            [datascript.core :as d]
+            [ring.middleware.json :as middleware.json]))
 
 (defn- repo-datoms [org-name {:keys [name default_branch] :or {default_branch "main"}}]
   [{:repo/name name
@@ -38,4 +39,6 @@
                      git-database/routes))
        (ring/create-default-handler))
       (middleware.params/wrap-params)
-      (conn-middleware conn)))
+      (conn-middleware conn)
+      (middleware.json/wrap-json-body {:keywords? true})
+      (middleware.json/wrap-json-response)))

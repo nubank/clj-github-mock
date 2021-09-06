@@ -1,6 +1,5 @@
 (ns clj-github-mock.core
   (:require [clj-github-mock.resource :as api]
-            [ring.middleware.json :as middleware.json]
             [ring.mock.request :as mock]))
 
 (defn ring-handler
@@ -20,9 +19,7 @@
   "
   [{:keys [initial-state] :as _opts}]
   (-> (api/conn initial-state)
-      (api/handler)
-      (middleware.json/wrap-json-body {:keywords? true})
-      (middleware.json/wrap-json-response)))
+      (api/handler)))
 
 (defn httpkit-fake-handler
   "Creates a `ring-handler` that is compatible with `http-kit-fake`. Receives the same
