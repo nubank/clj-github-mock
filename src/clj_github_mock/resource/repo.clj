@@ -1,14 +1,13 @@
 (ns clj-github-mock.resource.repo
-  (:require [medley.core :as m]
-            [clojure.string :as string]
+  (:require [clojure.string :as string]
             [datascript.core :as d]
             [clj-github-mock.handlers :as handlers]
             [clj-github-mock.impl.jgit :as jgit]
             [base64-clj.core :as base64]))
 
-(def repo-defaults {:default_branch "main"})
+(def default_branch "main")
 
-(def db-schema {:repo/name+org {:db/tupleAttrs [:repo/name :repo/org]
+(def db-schema {:repo/org+name {:db/tupleAttrs [:repo/org :repo/name]
                                 :db/type :db.type/tuple
                                 :db/unique :db.unique/identity}
                 :repo/org {:db/type :db.type/ref}})
@@ -17,15 +16,16 @@
   (fn [{conn :conn {:keys [org repo]} :path-params :as request}]
     (let [db (d/db conn)
           org-id (d/entid db [:org/name org])
-          repo (d/entity db [:repo/name+org [repo org-id]])]
+          repo (d/entity db [:repo/org+name [org-id repo]])]
       (handler (assoc request :repo repo)))))
 
 (defn repo-key [db {{:keys [org repo]} :path-params}]
-  [:repo/name+org [repo (d/entid db [:org/name org])]])
+  [:repo/org+name [(d/entid db [:org/name org]) repo]])
 
 (defn repo-body [repo]
   (merge
-   {:name (:repo/name repo)
+   {:id (:repo/id repo)
+    :name (:repo/name repo)
     :full_name (string/join "/" [(-> repo :repo/org :org/name) (:repo/name repo)])}
    (:repo/attrs repo)))
 
@@ -33,15 +33,15 @@
                     body :body}]
   {:repo/name (:name body)
    :repo/org [:org/name org]
-   :repo/attrs (merge repo-defaults (m/remove-keys #{:name} body))
+   :repo/default_branch (get body :default_branch default_branch)
+   :repo/full_name (string/join "/" [org (:name body)])
    :repo/jgit (jgit/empty-repo)})
 
 (defn repo-patch [db {{:keys [org repo]} :path-params
                       body :body}]
-  (let [key [repo (d/entid db [:org/name org])]]
-    {:repo/name+org key
-     :repo/attrs (merge (-> (d/entity db [:repo/name+org key]) :repo/attrs)
-                        body)}))
+  (let [key [(d/entid db [:org/name org]) repo]]
+    {:repo/org+name key
+     :repo/default_branch (get body :default_branch default_branch)}))
 
 (defn repo-list [db {{:keys [org]} :path-params}]
   (->> (d/q '[:find [?r ...]
@@ -68,7 +68,7 @@
    :list-fn (handlers/db-list-fn repo-list)})
 
 (defn branch-key [db {{:keys [org repo branch]} :path-params}]
-  [:ref/repo+ref [(d/entid db [:repo/name+org [repo (d/entid db [:org/name org])]]) (str "refs/heads/" branch)]])
+  [:ref/repo+ref [(d/entid db [:repo/org+name [(d/entid db [:org/name org]) repo]]) (str "refs/heads/" branch)]])
 
 (defn branch-body [branch]
   {:name (string/replace (:ref/ref branch) "refs/heads/" "")

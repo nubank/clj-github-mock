@@ -19,7 +19,7 @@
   "
   [{:keys [initial-state] :as _opts}]
   (-> (api/conn initial-state)
-      (api/handler)))
+      (api/json-handler)))
 
 (defn httpkit-fake-handler
   "Creates a `ring-handler` that is compatible with `http-kit-fake`. Receives the same

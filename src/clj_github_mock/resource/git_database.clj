@@ -68,7 +68,7 @@
                          [:parents {:optional true} [:vector :string]]]]]})
 
 (defn ref-key [db {{:keys [org repo ref]} :path-params}]
-  [:ref/repo+ref [(d/entid db [:repo/name+org [repo (d/entid db [:org/name org])]]) (str "refs/" ref)]])
+  [:ref/repo+ref [(d/entid db [:repo/org+name [(d/entid db [:org/name org]) repo]]) (str "refs/" ref)]])
 
 (defn ref-body [ref]
   {:ref (:ref/ref ref)

@@ -39,6 +39,9 @@
                      git-database/routes))
        (ring/create-default-handler))
       (middleware.params/wrap-params)
-      (conn-middleware conn)
+      (conn-middleware conn)))
+
+(defn json-handler [conn]
+  (-> (handler conn)
       (middleware.json/wrap-json-body {:keywords? true})
       (middleware.json/wrap-json-response)))

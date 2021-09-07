@@ -11,7 +11,7 @@
   "Creates a `ring-handler` that is compatible with `http-kit-fake`. Receives the same
   options as `ring-handler."
   [conn]
-  (let [handler (mock-resource/handler conn)]
+  (let [handler (mock-resource/json-handler conn)]
     (fn [_ {:keys [method url body headers] :as req} _]
       (handler (merge (reduce
                        (fn [req [header value]]

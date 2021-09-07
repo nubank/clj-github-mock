@@ -239,7 +239,7 @@
   - `:ents`: a map from ent type to a collection of the ents generated for that type"
   ([query]
    (let [the-schema (schema)]
-     (database query (conn schema) the-schema)))
+     (database query (conn the-schema) the-schema)))
   ([query conn the-schema]
    (gen/->Generator
     (fn [rnd size]
@@ -252,6 +252,7 @@
         (rose/pure
          (merge
           {:conn conn
+           :handler (resource/handler conn)
            :ent-db ent-db
            :db @conn
            :ents (ent-attrs-map ent-db)})))))))
