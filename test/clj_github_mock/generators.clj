@@ -179,9 +179,9 @@
             :transact-fn commit-transact}
    :branch {:prefix :branch
             :malli-schema [:map
-                           [:ref/ref [:string {:gen/gen (gen/fmap #(str "refs/heads/" %) (unique-object-name))}]]]
-            :relations {:ref/repo [:repo :repo/id]
-                        :ref/commit [:commit :commit/id]}}})
+                           [:branch/name [:string {:gen/gen (unique-object-name)}]]]
+            :relations {:branch/repo [:repo :repo/id]
+                        :branch/commit [:commit :commit/id]}}})
 
 (defn- malli-create-gen
   [ent-db]

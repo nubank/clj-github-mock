@@ -14,10 +14,10 @@
                 :commit/tree {:db/type :db.type/ref}
                 :commit/parents {:db/type :db.type/ref
                                  :db/cardinality :db.cardinality/many}
-                :ref/repo+ref {:db/tupleAttrs [:ref/repo :ref/ref]
-                               :db/unique :db.unique/identity}
-                :ref/repo {:db/type :db.type/ref}
-                :ref/commit {:db/type :db.type/ref}})
+                :branch/repo+name {:db/tupleAttrs [:branch/repo :branch/name]
+                                   :db/unique :db.unique/identity}
+                :branch/repo {:db/type :db.type/ref}
+                :branch/commit {:db/type :db.type/ref}})
 
 (defn tree-body [tree]
   (jgit/get-tree (-> tree :tree/repo :repo/jgit) (:tree/sha tree)))
@@ -75,27 +75,28 @@
                          [:parents {:optional true} [:vector :string]]]]]})
 
 (defn ref-key [db {{:keys [org repo ref]} :path-params}]
-  [:ref/repo+ref [(d/entid db [:repo/org+name [(d/entid db [:org/name org]) repo]]) (str "refs/" ref)]])
+  [:branch/repo+name [(d/entid db [:repo/org+name [(d/entid db [:org/name org]) repo]])
+                      (second (re-find #"heads/(.*)" ref))]])
 
 (defn ref-body [ref]
-  {:ref (:ref/ref ref)
+  {:ref (str "refs/heads/" (:branch/name ref))
    :object {:type :commit
-            :sha (-> ref :ref/commit :commit/sha)}})
+            :sha (-> ref :branch/commit :commit/sha)}})
 
 (defn ref-post [db {:keys [repo body]}]
-  {:ref/repo (:db/id repo)
-   :ref/ref (:ref body)
-   :ref/commit (d/entid db [:commit/repo+sha [(:db/id repo) (:sha body)]])})
+  {:branch/repo (:db/id repo)
+   :branch/name (second (re-find #"refs/heads/(.*)" (:ref body)))
+   :branch/commit (d/entid db [:commit/repo+sha [(:db/id repo) (:sha body)]])})
 
 (defn ref-patch [db {:keys [repo body]
                      {:keys [ref]} :path-params}]
-  (let [key [(:db/id repo) (str "refs/" ref)]
-        current-sha (-> (d/entity db [:ref/repo+ref key]) :ref/commit :commit/sha)
+  (let [key [(:db/id repo) (second (re-find #"heads/(.*)" ref))]
+        current-sha (-> (d/entity db [:branch/repo+name key]) :branch/commit :commit/sha)
         new-sha (:sha body)
         base (jgit/merge-base (:repo/jgit repo) current-sha new-sha)]
     (if (or (:force body) (= current-sha base))
-      {:ref/repo+ref key
-       :ref/commit (d/entid db [:commit/repo+sha [(:db/id repo) (:sha body)]])}
+      {:branch/repo+name key
+       :branch/commit (d/entid db [:commit/repo+sha [(:db/id repo) (:sha body)]])}
       (throw (ex-info "not fast forward" {})))))
 
 (def ref-resource {:body-fn ref-body

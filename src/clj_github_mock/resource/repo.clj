@@ -68,12 +68,12 @@
    :list-fn (handlers/db-list-fn repo-list)})
 
 (defn branch-key [db {{:keys [org repo branch]} :path-params}]
-  [:ref/repo+ref [(d/entid db [:repo/org+name [(d/entid db [:org/name org]) repo]]) (str "refs/heads/" branch)]])
+  [:branch/repo+name [(d/entid db [:repo/org+name [(d/entid db [:org/name org]) repo]]) branch]])
 
 (defn branch-body [branch]
-  {:name (string/replace (:ref/ref branch) "refs/heads/" "")
-   :commit {:sha (-> branch :ref/commit :commit/sha)
-            :commit (-> (jgit/get-commit (:repo/jgit (:ref/repo branch)) (-> branch :ref/commit :commit/sha))
+  {:name (:branch/name branch)
+   :commit {:sha (-> branch :branch/commit :commit/sha)
+            :commit (-> (jgit/get-commit (:repo/jgit (:branch/repo branch)) (-> branch :branch/commit :commit/sha))
                         (dissoc :sha))}})
 
 (def branch-resource
@@ -88,7 +88,7 @@
   (if (sha? ref)
     ref
     (let [branch (or ref default_branch)]
-      (:commit/sha (:ref/commit (d/entity db [:ref/repo+ref [repo-id (str "refs/heads/" branch)]]))))))
+      (:commit/sha (:branch/commit (d/entity db [:branch/repo+name [repo-id branch]]))))))
 
 (defn content-lookup [{{git-repo :repo/jgit :as repo} :repo
                        {:keys [path]} :path-params

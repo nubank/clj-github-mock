@@ -33,10 +33,10 @@
                 (d/pull @conn '[*] [:commit/repo+sha [(:db/id repo0) sha]])))))
 
 (deftest get-ref-test
-  (let [{{:keys [org0 repo0 branch0]} :ents handler :handler} (mock-gen/gen-ents {:branch [[1 {:spec-gen {:ref/ref "refs/heads/main"}}]]})]
+  (let [{{:keys [org0 repo0 branch0]} :ents handler :handler} (mock-gen/gen-ents {:branch [[1 {:spec-gen {:branch/name "main"}}]]})]
     (is (match? {:body {:ref "refs/heads/main"
                         :object {:type :commit
-                                 :sha (:commit/sha (:ref/commit branch0))}}}
+                                 :sha (:commit/sha (:branch/commit branch0))}}}
                 (handler (mock/request :get (format "/repos/%s/%s/git/ref/%s" (:org/name org0) (:repo/name repo0) "heads/main")))))))
 
 (deftest post-ref-test
@@ -44,11 +44,11 @@
     (handler (-> (mock/request :post (format "/repos/%s/%s/git/refs" (:org/name org0) (:repo/name repo0)))
                  (assoc :body {:ref "refs/heads/main"
                                :sha (:commit/sha commit0)})))
-    (is (match? {:ref/commit {:commit/sha (:commit/sha commit0)}}
-                (d/pull @conn '[{:ref/commit [:commit/sha]}] [:ref/repo+ref [(:db/id repo0) "refs/heads/main"]])))))
+    (is (match? {:branch/commit {:commit/sha (:commit/sha commit0)}}
+                (d/pull @conn '[{:branch/commit [:commit/sha]}] [:branch/repo+name [(:db/id repo0) "main"]])))))
 
 (deftest patch-ref-test
-  (let [{{:keys [org0 repo0 commit0 tree0]} :ents conn :conn handler :handler} (mock-gen/gen-ents {:branch [[1 {:spec-gen {:ref/ref "refs/heads/main"}}]]
+  (let [{{:keys [org0 repo0 commit0 tree0]} :ents conn :conn handler :handler} (mock-gen/gen-ents {:branch [[1 {:spec-gen {:branch/name "main"}}]]
                                                                                                    :tree [[1 {:spec-gen {:tree/content [{:path "some-file" :type "blob" :mode "100644" :content "content"}]}}]]})
         {{tree-sha :sha} :body} (handler (-> (mock/request :post (format "/repos/%s/%s/git/trees" (:org/name org0) (:repo/name repo0)))
                                              (assoc :body {:base_tree (:tree/sha tree0)
@@ -59,27 +59,27 @@
                                                          :message "message"})))]
     (handler (-> (mock/request :patch (format "/repos/%s/%s/git/refs/%s" (:org/name org0) (:repo/name repo0) "heads/main"))
                  (assoc :body {:sha sha})))
-    (is (match? {:ref/commit {:commit/sha  sha}}
-                (d/pull @conn '[{:ref/commit [:commit/sha]}] [:ref/repo+ref [(:db/id repo0) "refs/heads/main"]]))))
-  (let [{{:keys [org0 repo0 wrong-commit]} :ents handler :handler} (mock-gen/gen-ents {:branch [[1 {:spec-gen {:ref/ref "refs/heads/main"}
-                                                                                                    :refs {:ref/commit :the-commit}}]]
+    (is (match? {:branch/commit {:commit/sha  sha}}
+                (d/pull @conn '[{:branch/commit [:commit/sha]}] [:branch/repo+name [(:db/id repo0) "main"]]))))
+  (let [{{:keys [org0 repo0 wrong-commit]} :ents handler :handler} (mock-gen/gen-ents {:branch [[1 {:spec-gen {:branch/name "main"}
+                                                                                                    :refs {:branch/commit :the-commit}}]]
                                                                                        :commit [[:the-commit]
                                                                                                 [:wrong-commit]]})]
     (is (match? {:status 422}
                 (handler (-> (mock/request :patch (format "/repos/%s/%s/git/refs/%s" (:org/name org0) (:repo/name repo0) "heads/main"))
                              (assoc :body {:sha (:commit/sha wrong-commit)}))))))
-  (let [{{:keys [org0 repo0 wrong-commit]} :ents conn :conn handler :handler} (mock-gen/gen-ents {:branch [[1 {:spec-gen {:ref/ref "refs/heads/main"}
-                                                                                                    :refs {:ref/commit :the-commit}}]]
+  (let [{{:keys [org0 repo0 wrong-commit]} :ents conn :conn handler :handler} (mock-gen/gen-ents {:branch [[1 {:spec-gen {:branch/name "main"}
+                                                                                                    :refs {:branch/commit :the-commit}}]]
                                                                                        :commit [[:the-commit]
                                                                                                 [:wrong-commit]]})]
     (handler (-> (mock/request :patch (format "/repos/%s/%s/git/refs/%s" (:org/name org0) (:repo/name repo0) "heads/main"))
                  (assoc :body {:sha (:commit/sha wrong-commit)
                                :force true})))
-    (is (match? {:ref/commit {:commit/sha (:commit/sha wrong-commit)}}
-                (d/pull @conn '[{:ref/commit [:commit/sha]}] [:ref/repo+ref [(:db/id repo0) "refs/heads/main"]])))))
+    (is (match? {:branch/commit {:commit/sha (:commit/sha wrong-commit)}}
+                (d/pull @conn '[{:branch/commit [:commit/sha]}] [:branch/repo+name [(:db/id repo0) "main"]])))))
 
 
 (deftest delete-ref-test
-  (let [{{:keys [org0 repo0]} :ents conn :conn handler :handler} (mock-gen/gen-ents {:branch [[1 {:spec-gen {:ref/ref "refs/heads/main"}}]]})]
+  (let [{{:keys [org0 repo0]} :ents conn :conn handler :handler} (mock-gen/gen-ents {:branch [[1 {:spec-gen {:branch/name "main"}}]]})]
     (handler (mock/request :delete (format "/repos/%s/%s/git/refs/%s" (:org/name org0) (:repo/name repo0) "heads/main")))
-    (is (nil? (d/entid @conn [:ref/repo+ref [(:db/id repo0) "refs/heads/main"]])))))
+    (is (nil? (d/entid @conn [:branch/repo+name [(:db/id repo0) "main"]])))))
