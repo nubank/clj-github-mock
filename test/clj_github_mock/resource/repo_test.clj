@@ -46,8 +46,8 @@
                 (handler (mock/request :get (format "/repos/%s/%s/branches/my-branch" (:org/name org0) (:repo/name repo0))))))))
 
 (deftest get-content-test
-  (let [{{:keys [org0 repo0 branch0]} :ents handler :handler} (mock-gen/gen-ents {:branch [[1 {:spec-gen {:ref/ref "refs/heads/main"
-                                                                                                  :branch/content [{:path "some-file" :mode "100644" :type "blob" :content "some-content"}]}}]]})]
+  (let [{{:keys [org0 repo0 branch0]} :ents handler :handler} (mock-gen/gen-ents {:branch [[1 {:spec-gen {:ref/ref "refs/heads/main"}}]]
+                                                                                  :tree [[1 {:spec-gen {:tree/content [{:path "some-file" :mode "100644" :type "blob" :content "some-content"}]}}]]})]
     (is (match? {:body {:type "file"
                         :path "some-file"
                         :content "c29tZS1jb250ZW50"}}
@@ -56,7 +56,7 @@
                         :path "some-file"
                         :content "c29tZS1jb250ZW50"}}
                 (handler (-> (mock/request :get (format "/repos/%s/%s/contents/some-file" (:org/name org0) (:repo/name repo0)))
-                             (mock/query-string {"ref" (:ref/sha branch0)})))))
+                             (mock/query-string {"ref" (:commit/sha (:ref/commit branch0))})))))
     (is (match? {:body {:type "file"
                         :path "some-file"
                         :content "c29tZS1jb250ZW50"}}

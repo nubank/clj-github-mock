@@ -137,30 +137,17 @@
   ([repo parent-commit-sha]
    (gen/generate (commit repo parent-commit-sha))))
 
-(defn- branch-transact [db branch]
-  (let [git-repo (-> (d/entity db (:ref/repo branch)) :repo/jgit)
-        tree-sha (jgit/create-tree! git-repo {:tree (:branch/content branch)})
-        sha (jgit/create-commit! git-repo {:tree tree-sha
-                                           :message "initial commit"})]
-    [(-> branch
-         (assoc :ref/sha sha)
-         (dissoc :branch/content))]))
-
 (defn- tree-transact [db tree]
   (let [git-repo (-> (d/entity db (:tree/repo tree)) :repo/jgit)
         sha (jgit/create-tree! git-repo {:tree (:tree/content tree)})]
-    [(-> tree
-         (assoc :tree/sha sha)
-         (dissoc :tree/content))]))
+    [(assoc tree :tree/sha sha)]))
 
 (defn- commit-transact [db commit]
   (let [git-repo (-> (d/entity db (:commit/repo commit)) :repo/jgit)
-        tree-sha (jgit/create-tree! git-repo {:tree (:commit/content commit)})
-        sha (jgit/create-commit! git-repo {:tree tree-sha
+        tree (d/entity db (:commit/tree commit))
+        sha (jgit/create-commit! git-repo {:tree (:tree/sha tree) 
                                            :message (:commit/message commit)})]
-    [(-> commit
-         (assoc :commit/sha sha)
-         (dissoc :commit/content))]))
+    [(assoc commit :commit/sha sha)]))
 
 (defn schema []
   {:org {:prefix :org
@@ -176,21 +163,25 @@
                          [:repo/jgit [:any {:gen/fmap (fn [_] (jgit/empty-repo))}]]]
           :relations {:repo/org [:org :org/name]}}
    :tree {:prefix :tree
+          :db-schema {:tree/id {:db/unique :db.unique/identity}}
           :malli-schema [:map
+                         [:tree/id :uuid]
                          [:tree/content [:vector {:gen/gen github-tree} :any]]]
           :relations {:tree/repo [:repo :repo/id]}
           :transact-fn tree-transact}
    :commit {:prefix :commit
+            :db-schema {:commit/id {:db/unique :db.unique/identity}}
             :malli-schema [:map
-                           [:commit/content [:vector {:gen/gen github-tree} :any]]]
-            :relations {:commit/repo [:repo :repo/id]}
+                           [:commit/id :uuid]]
+            :relations {:commit/repo [:repo :repo/id]
+                        :commit/tree [:tree :tree/id]}
+            :constraints {:commit/tree #{:uniq}}
             :transact-fn commit-transact}
    :branch {:prefix :branch
             :malli-schema [:map
-                           [:ref/ref [:string {:gen/gen (gen/fmap #(str "refs/heads/" %) (unique-object-name))}]]
-                           [:branch/content [:vector {:gen/gen github-tree} :any]]]
-            :relations {:ref/repo [:repo :repo/id]}
-            :transact-fn branch-transact}})
+                           [:ref/ref [:string {:gen/gen (gen/fmap #(str "refs/heads/" %) (unique-object-name))}]]]
+            :relations {:ref/repo [:repo :repo/id]
+                        :ref/commit [:commit :commit/id]}}})
 
 (defn- malli-create-gen
   [ent-db]
@@ -269,8 +260,7 @@
   ([query conn the-schema]
    (gen/->Generator
     (fn [rnd size]
-      (let [the-schema (schema)
-            ent-db (-> (ent-db-malli-gen {:schema the-schema
+      (let [ent-db (-> (ent-db-malli-gen {:schema the-schema
                                           :gen-options {:rnd-state (atom rnd)
                                                         :size size}}
                                          query)

@@ -7,12 +7,17 @@
 (def db-schema {:tree/repo+sha {:db/tupleAttrs [:tree/repo :tree/sha]
                                 :db/unique :db.unique/identity}
                 :tree/repo {:db/type :db.type/ref}
+                :tree/base {:db/type :db.type/ref}
                 :commit/repo+sha {:db/tupleAttrs [:commit/repo :commit/sha]
                                   :db/unique :db.unique/identity}
                 :commit/repo {:db/type :db.type/ref}
+                :commit/tree {:db/type :db.type/ref}
+                :commit/parents {:db/type :db.type/ref
+                                 :db/cardinality :db.cardinality/many}
                 :ref/repo+ref {:db/tupleAttrs [:ref/repo :ref/ref]
                                :db/unique :db.unique/identity}
-                :ref/repo {:db/type :db.type/ref}})
+                :ref/repo {:db/type :db.type/ref}
+                :ref/commit {:db/type :db.type/ref}})
 
 (defn tree-body [tree]
   (jgit/get-tree (-> tree :tree/repo :repo/jgit) (:tree/sha tree)))
@@ -75,22 +80,22 @@
 (defn ref-body [ref]
   {:ref (:ref/ref ref)
    :object {:type :commit
-            :sha (:ref/sha ref)}})
+            :sha (-> ref :ref/commit :commit/sha)}})
 
-(defn ref-post [_ {:keys [repo body]}]
+(defn ref-post [db {:keys [repo body]}]
   {:ref/repo (:db/id repo)
    :ref/ref (:ref body)
-   :ref/sha (:sha body)})
+   :ref/commit (d/entid db [:commit/repo+sha [(:db/id repo) (:sha body)]])})
 
 (defn ref-patch [db {:keys [repo body]
                      {:keys [ref]} :path-params}]
   (let [key [(:db/id repo) (str "refs/" ref)]
-        current-sha (-> (d/entity db [:ref/repo+ref key]) :ref/sha)
+        current-sha (-> (d/entity db [:ref/repo+ref key]) :ref/commit :commit/sha)
         new-sha (:sha body)
         base (jgit/merge-base (:repo/jgit repo) current-sha new-sha)]
     (if (or (:force body) (= current-sha base))
       {:ref/repo+ref key
-       :ref/sha (:sha body)}
+       :ref/commit (d/entid db [:commit/repo+sha [(:db/id repo) (:sha body)]])}
       (throw (ex-info "not fast forward" {})))))
 
 (def ref-resource {:body-fn ref-body

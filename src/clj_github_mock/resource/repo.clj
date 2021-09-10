@@ -72,8 +72,8 @@
 
 (defn branch-body [branch]
   {:name (string/replace (:ref/ref branch) "refs/heads/" "")
-   :commit {:sha (:ref/sha branch)
-            :commit (-> (jgit/get-commit (:repo/jgit (:ref/repo branch)) (:ref/sha branch))
+   :commit {:sha (-> branch :ref/commit :commit/sha)
+            :commit (-> (jgit/get-commit (:repo/jgit (:ref/repo branch)) (-> branch :ref/commit :commit/sha))
                         (dissoc :sha))}})
 
 (def branch-resource
@@ -88,7 +88,7 @@
   (if (sha? ref)
     ref
     (let [branch (or ref default_branch)]
-      (:ref/sha (d/entity db [:ref/repo+ref [repo-id (str "refs/heads/" branch)]])))))
+      (:commit/sha (:ref/commit (d/entity db [:ref/repo+ref [repo-id (str "refs/heads/" branch)]]))))))
 
 (defn content-lookup [{{git-repo :repo/jgit :as repo} :repo
                        {:keys [path]} :path-params
