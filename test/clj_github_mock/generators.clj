@@ -153,6 +153,15 @@
          (assoc :tree/sha sha)
          (dissoc :tree/content))]))
 
+(defn- commit-transact [db commit]
+  (let [git-repo (-> (d/entity db (:commit/repo commit)) :repo/jgit)
+        tree-sha (jgit/create-tree! git-repo {:tree (:commit/content commit)})
+        sha (jgit/create-commit! git-repo {:tree tree-sha
+                                           :message (:commit/message commit)})]
+    [(-> commit
+         (assoc :commit/sha sha)
+         (dissoc :commit/content))]))
+
 (defn schema []
   {:org {:prefix :org
          :malli-schema [:map
@@ -171,6 +180,11 @@
                          [:tree/content [:vector {:gen/gen github-tree} :any]]]
           :relations {:tree/repo [:repo :repo/id]}
           :transact-fn tree-transact}
+   :commit {:prefix :commit
+            :malli-schema [:map
+                           [:commit/content [:vector {:gen/gen github-tree} :any]]]
+            :relations {:commit/repo [:repo :repo/id]}
+            :transact-fn commit-transact}
    :branch {:prefix :branch
             :malli-schema [:map
                            [:ref/ref [:string {:gen/gen (gen/fmap #(str "refs/heads/" %) (unique-object-name))}]]

@@ -2,7 +2,6 @@
   (:require [clj-github-mock.resource.git-database :as git-database]
             [clojure.test :refer [deftest is]]
             [clj-github-mock.generators :as mock-gen]
-            [clj-github-mock.impl.jgit :as jgit]
             [matcher-combinators.test :refer [match?]]
             [ring.mock.request :as mock]
             [datascript.core :as d])
@@ -21,39 +20,19 @@
     (is (match? {:tree/sha "1b3303a1a927c3cf37df3deb03a5fd38df26c051"}
                 (d/pull @conn '[*] [:tree/repo+sha [(:db/id repo0) "1b3303a1a927c3cf37df3deb03a5fd38df26c051"]])))))
 
-(deftest commit-body-test
-  (let [{{:keys [repo0]} :ents} (mock-gen/gen-ents {:repo [[1]]})
-        commit0 (mock-gen/gen-commit (:repo/jgit repo0))
-        tree (mock-gen/gen-tree (:repo/jgit repo0) (-> commit0 :tree :sha))
-        sha (jgit/create-commit! (:repo/jgit repo0) {:tree (:sha tree)
-                                                     :message "message"
-                                                     :parents [(:sha commit0)]})]
-    (is (= {:sha sha
-            :message "message"
-            :tree {:sha (:sha tree)}
-            :parents [{:sha (:sha commit0)}]}
-           (git-database/commit-body {:commit/repo repo0
-                                      :commit/sha sha})))))
+(deftest get-commit-test
+  (let [{{:keys [org0 repo0 commit0]} :ents handler :handler} (mock-gen/gen-ents {:commit [[1 {:spec-gen {:commit/message "message"}}]]})]
+    (is (match? {:body {:sha (:commit/sha commit0)
+                        :message "message"}}
+                (handler (mock/request :get (format "/repos/%s/%s/git/commits/%s" (:org/name org0) (:repo/name repo0) (:commit/sha commit0))))))))
 
-(deftest commit-lookup-test
-  (let [{{:keys [repo0]} :ents} (mock-gen/gen-ents {:repo [[1]]})
-        {:keys [sha]} (mock-gen/gen-commit (:repo/jgit repo0))]
-    (is (= {:commit/repo repo0
-            :commit/sha sha}
-           (git-database/commit-lookup {:path-params {:sha sha}
-                                        :repo repo0})))
-    (is (nil? (git-database/commit-lookup {:path-params {:sha "6b584e8ece562ebffc15d38808cd6b98fc3d97ea"}
-                                           :repo repo0})))))
-
-(deftest commit-post-test
-  (let [{{:keys [repo0]} :ents} (mock-gen/gen-ents {:repo [[1]]})
-        parent (mock-gen/gen-commit (:repo/jgit repo0))
-        tree (mock-gen/gen-tree (:repo/jgit repo0) (-> parent :tree :sha))
-        result (git-database/commit-post {:repo repo0
-                                          :body {:tree (:sha tree)
-                                                 :message "message"
-                                                 :parents [(:sha parent)]}})]
-    (is (jgit/object-exists? (:repo/jgit (:commit/repo result)) (:commit/sha result)))))
+(deftest post-commit-test
+  (let [{{:keys [org0 repo0 tree0]} :ents conn :conn handler :handler} (mock-gen/gen-ents {:tree [[1 {:spec-gen {:tree/content [{:path "some-file" :type "blob" :mode "100644" :content "content"}]}}]]})
+        {{:keys [sha]} :body} (handler (-> (mock/request :post (format "/repos/%s/%s/git/commits" (:org/name org0) (:repo/name repo0)))
+                                           (assoc :body {:tree (:tree/sha tree0)
+                                                         :message "message"})))]
+    (is (match? {:commit/sha sha}
+                (d/pull @conn '[*] [:commit/repo+sha [(:db/id repo0) sha]])))))
 
 (deftest ref-key-test
   (let [{{:keys [repo0]} :ents db :db} (mock-gen/gen-ents {:repo [[1]]})]

@@ -7,6 +7,9 @@
 (def db-schema {:tree/repo+sha {:db/tupleAttrs [:tree/repo :tree/sha]
                                 :db/unique :db.unique/identity}
                 :tree/repo {:db/type :db.type/ref}
+                :commit/repo+sha {:db/tupleAttrs [:commit/repo :commit/sha]
+                                  :db/unique :db.unique/identity}
+                :commit/repo {:db/type :db.type/ref}
                 :ref/repo+ref {:db/tupleAttrs [:ref/repo :ref/ref]
                                :db/unique :db.unique/identity}
                 :ref/repo {:db/type :db.type/ref}})
@@ -15,17 +18,17 @@
   (jgit/get-tree (-> tree :tree/repo :repo/jgit) (:tree/sha tree)))
 
 (defn tree-key [_ {{:keys [sha]} :path-params
-                    repo :repo}]
+                   repo :repo}]
   [:tree/repo+sha [(:db/id repo) sha]])
 
 (defn tree-post [_ {{jgit-repo :repo/jgit :as repo} :repo
-                     body :body}]
+                    body :body}]
   {:tree/repo (:db/id repo)
    :tree/sha (jgit/create-tree! jgit-repo body)})
 
 (def tree-resource
   {:body-fn tree-body
-   :lookup-fn (handlers/db-lookup-fn tree-key) 
+   :lookup-fn (handlers/db-lookup-fn tree-key)
    :post-fn (handlers/db-transact-fn tree-post)
    :post-schema [:map
                  [:path-params [:map
@@ -44,21 +47,19 @@
 (defn commit-body [commit]
   (jgit/get-commit (-> commit :commit/repo :repo/jgit) (:commit/sha commit)))
 
-(defn commit-lookup [{{:keys [sha]} :path-params
-                      {jgit-repo :repo/jgit :as repo} :repo}]
-  (when (jgit/object-exists? jgit-repo sha)
-    {:commit/repo repo
-     :commit/sha sha}))
+(defn commit-key [_ {{:keys [sha]} :path-params
+                     repo :repo}]
+  [:commit/repo+sha [(:db/id repo) sha]])
 
-(defn commit-post [{{jgit-repo :repo/jgit :as repo} :repo
-                    body :body}]
-  {:commit/repo repo
+(defn commit-post [_ {{jgit-repo :repo/jgit :as repo} :repo
+                      body :body}]
+  {:commit/repo (:db/id repo)
    :commit/sha (jgit/create-commit! jgit-repo body)})
 
 (def commit-resource
   {:body-fn commit-body
-   :lookup-fn commit-lookup
-   :post-fn commit-post
+   :lookup-fn (handlers/db-lookup-fn commit-key)
+   :post-fn (handlers/db-transact-fn commit-post)
    :post-schema [:map
                  [:path-params [:map
                                 [:org :string]
@@ -82,7 +83,7 @@
    :ref/sha (:sha body)})
 
 (defn ref-patch [db {:keys [repo body]
-                    {:keys [ref]} :path-params}]
+                     {:keys [ref]} :path-params}]
   (let [key [(:db/id repo) (str "refs/" ref)]
         current-sha (-> (d/entity db [:ref/repo+ref key]) :ref/sha)
         new-sha (:sha body)
