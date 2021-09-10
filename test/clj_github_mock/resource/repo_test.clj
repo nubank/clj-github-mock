@@ -1,10 +1,8 @@
 (ns clj-github-mock.resource.repo-test
-  (:require [clj-github-mock.resource.repo :as repo]
-            [clj-github-mock.generators :as mock-gen]
+  (:require [clj-github-mock.generators :as mock-gen]
             [clojure.test :refer [deftest is testing]]
             [matcher-combinators.test :refer [match?]]
             [matcher-combinators.matchers :as matchers]
-            [base64-clj.core :as base64]
             [ring.mock.request :as mock]
             [datascript.core :as d]))
 
@@ -43,40 +41,24 @@
                 (d/pull @conn '[*] (:db/id repo0))))))
 
 (deftest get-branch-test
-  (let [{{:keys [org0 repo0 branch0]} :ents handler :handler} (mock-gen/gen-ents {:branch [[1 {:spec-gen {:ref/ref "refs/heads/my-branch"}}]]})]
+  (let [{{:keys [org0 repo0]} :ents handler :handler} (mock-gen/gen-ents {:branch [[1 {:spec-gen {:ref/ref "refs/heads/my-branch"}}]]})]
     (is (match? {:body {:name "my-branch"}}
                 (handler (mock/request :get (format "/repos/%s/%s/branches/my-branch" (:org/name org0) (:repo/name repo0))))))))
 
-(deftest content-lookup-test
-  (let [{{:keys [repo0 branch0]} :ents conn :conn} (mock-gen/gen-ents {:branch [[1 {:spec-gen {:branch/content [{:path "some-file" :mode "100644" :type "blob" :content "some-content"}]}}]]})]
-    (is (= {:repo repo0
-            :sha (:ref/sha branch0)
-            :path "some-file"}
-           (repo/content-lookup {:repo repo0
-                                 :conn conn
-                                 :path-params {:path "some-file"}
-                                 :query-params {"ref" (:ref/sha branch0)}})))
-    (is (= {:repo repo0
-            :sha (:ref/sha branch0)
-            :path "some-file"}
-           (repo/content-lookup {:repo repo0
-                                 :conn conn
-                                 :path-params {:path "some-file"}
-                                 :query-params {"ref" (second (re-find #"refs/heads/(.*)" (:ref/ref branch0)))}})))
-    (is (nil? (repo/content-lookup {:repo repo0
-                                    :conn conn
-                                    :path-params {:path "some-file"}
-                                    :query-params {"ref" "unknown-branch"}})))
-    (is (nil? (repo/content-lookup {:repo repo0
-                                    :conn conn
-                                    :path-params {:path "unknown-file"}
-                                    :query-params {"ref" (:ref/sha branch0)}})))))
-
-(deftest content-body-test
-  (let [{{:keys [repo0 branch0]} :ents} (mock-gen/gen-ents {:branch [[1 {:spec-gen {:branch/content [{:path "some-file" :mode "100644" :type "blob" :content "some-content"}]}}]]})]
-    (is (= {:type "file"
-            :path "some-file"
-            :content (base64/encode "some-content" "UTF-8")}
-           (repo/content-body {:repo repo0
-                               :sha (:ref/sha branch0)
-                               :path "some-file"})))))
+(deftest get-content-test
+  (let [{{:keys [org0 repo0 branch0]} :ents handler :handler} (mock-gen/gen-ents {:branch [[1 {:spec-gen {:ref/ref "refs/heads/main"
+                                                                                                  :branch/content [{:path "some-file" :mode "100644" :type "blob" :content "some-content"}]}}]]})]
+    (is (match? {:body {:type "file"
+                        :path "some-file"
+                        :content "c29tZS1jb250ZW50"}}
+                (handler (mock/request :get (format "/repos/%s/%s/contents/some-file" (:org/name org0) (:repo/name repo0))))))
+    (is (match? {:body {:type "file"
+                        :path "some-file"
+                        :content "c29tZS1jb250ZW50"}}
+                (handler (-> (mock/request :get (format "/repos/%s/%s/contents/some-file" (:org/name org0) (:repo/name repo0)))
+                             (mock/query-string {"ref" (:ref/sha branch0)})))))
+    (is (match? {:body {:type "file"
+                        :path "some-file"
+                        :content "c29tZS1jb250ZW50"}}
+                (handler (-> (mock/request :get (format "/repos/%s/%s/contents/some-file" (:org/name org0) (:repo/name repo0)))
+                             (mock/query-string {"ref" "main"})))))))
