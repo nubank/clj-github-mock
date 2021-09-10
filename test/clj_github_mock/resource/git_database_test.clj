@@ -2,34 +2,24 @@
   (:require [clj-github-mock.resource.git-database :as git-database]
             [clojure.test :refer [deftest is]]
             [clj-github-mock.generators :as mock-gen]
-            [clj-github-mock.impl.jgit :as jgit])
+            [clj-github-mock.impl.jgit :as jgit]
+            [matcher-combinators.test :refer [match?]]
+            [ring.mock.request :as mock]
+            [datascript.core :as d])
   (:import [clojure.lang ExceptionInfo]))
 
-(deftest tree-body-test
-  (let [{{:keys [repo0]} :ents} (mock-gen/gen-ents {:repo [[1]]})
-        sha (jgit/create-tree! (:repo/jgit repo0)
-                               {:tree [{:path "some-file" :type "blob" :mode "100644" :content "content"}]})]
-    (is (= {:sha sha
-            :tree [{:path "some-file" :type "blob" :mode "100644" :sha "6b584e8ece562ebffc15d38808cd6b98fc3d97ea"}]}
-           (git-database/tree-body {:tree/repo repo0
-                                    :tree/sha sha})))))
+(deftest get-tree-test
+  (let [{{:keys [org0 repo0 tree0]} :ents handler :handler} (mock-gen/gen-ents {:tree [[1 {:spec-gen {:tree/content [{:path "some-file" :type "blob" :mode "100644" :content "content"}]}}]]})]
+    (is (match? {:body {:sha "1b3303a1a927c3cf37df3deb03a5fd38df26c051"
+                        :tree [{:path "some-file" :type "blob" :mode "100644" :sha "6b584e8ece562ebffc15d38808cd6b98fc3d97ea"}]}}
+                (handler (mock/request :get (format "/repos/%s/%s/git/trees/%s" (:org/name org0) (:repo/name repo0) (:tree/sha tree0))))))))
 
-(deftest tree-lookup-test
-  (let [{{:keys [repo0]} :ents} (mock-gen/gen-ents {:repo [[1]]})
-        {:keys [sha]} (mock-gen/gen-tree (:repo/jgit repo0))]
-    (is (= {:tree/repo repo0
-            :tree/sha sha}
-           (git-database/tree-lookup {:path-params {:sha sha}
-                                      :repo repo0})))
-    (is (nil? (git-database/tree-lookup {:path-params {:sha "6b584e8ece562ebffc15d38808cd6b98fc3d97ea"}
-                                         :repo repo0})))))
-
-(deftest tree-post-test
-  (let [{{:keys [repo0]} :ents} (mock-gen/gen-ents {:repo [[1]]})
-        tree (mock-gen/gen-github-tree)
-        result (git-database/tree-post {:repo repo0
-                                        :body {:tree tree}})]
-    (is (jgit/object-exists? (:repo/jgit (:tree/repo result)) (:tree/sha result)))))
+(deftest post-tree-test
+  (let [{{:keys [org0 repo0]} :ents conn :conn handler :handler} (mock-gen/gen-ents {:repo [[1]]})]
+    (handler (-> (mock/request :post (format "/repos/%s/%s/git/trees" (:org/name org0) (:repo/name repo0)))
+                 (assoc :body {:tree [{:path "some-file" :type "blob" :mode "100644" :content "content"}]})))
+    (is (match? {:tree/sha "1b3303a1a927c3cf37df3deb03a5fd38df26c051"}
+                (d/pull @conn '[*] [:tree/repo+sha [(:db/id repo0) "1b3303a1a927c3cf37df3deb03a5fd38df26c051"]])))))
 
 (deftest commit-body-test
   (let [{{:keys [repo0]} :ents} (mock-gen/gen-ents {:repo [[1]]})

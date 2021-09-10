@@ -146,6 +146,13 @@
          (assoc :ref/sha sha)
          (dissoc :branch/content))]))
 
+(defn- tree-transact [db tree]
+  (let [git-repo (-> (d/entity db (:tree/repo tree)) :repo/jgit)
+        sha (jgit/create-tree! git-repo {:tree (:tree/content tree)})]
+    [(-> tree
+         (assoc :tree/sha sha)
+         (dissoc :tree/content))]))
+
 (defn schema []
   {:org {:prefix :org
          :malli-schema [:map
@@ -159,6 +166,11 @@
                                        [:default_branch [:= "main"]]]]
                          [:repo/jgit [:any {:gen/fmap (fn [_] (jgit/empty-repo))}]]]
           :relations {:repo/org [:org :org/name]}}
+   :tree {:prefix :tree
+          :malli-schema [:map
+                         [:tree/content [:vector {:gen/gen github-tree} :any]]]
+          :relations {:tree/repo [:repo :repo/id]}
+          :transact-fn tree-transact}
    :branch {:prefix :branch
             :malli-schema [:map
                            [:ref/ref [:string {:gen/gen (gen/fmap #(str "refs/heads/" %) (unique-object-name))}]]

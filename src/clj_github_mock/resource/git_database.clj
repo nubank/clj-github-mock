@@ -4,28 +4,29 @@
             [clj-github-mock.handlers :as handlers]
             [clj-github-mock.resource.repo :as repo]))
 
-(def db-schema {:ref/repo+ref {:db/tupleAttrs [:ref/repo :ref/ref]
+(def db-schema {:tree/repo+sha {:db/tupleAttrs [:tree/repo :tree/sha]
+                                :db/unique :db.unique/identity}
+                :tree/repo {:db/type :db.type/ref}
+                :ref/repo+ref {:db/tupleAttrs [:ref/repo :ref/ref]
                                :db/unique :db.unique/identity}
                 :ref/repo {:db/type :db.type/ref}})
 
 (defn tree-body [tree]
   (jgit/get-tree (-> tree :tree/repo :repo/jgit) (:tree/sha tree)))
 
-(defn tree-lookup [{{:keys [sha]} :path-params
-                    {jgit-repo :repo/jgit :as repo} :repo}]
-  (when (jgit/object-exists? jgit-repo sha)
-    {:tree/repo repo
-     :tree/sha sha}))
+(defn tree-key [_ {{:keys [sha]} :path-params
+                    repo :repo}]
+  [:tree/repo+sha [(:db/id repo) sha]])
 
-(defn tree-post [{{jgit-repo :repo/jgit :as repo} :repo
-                  body :body}]
-  {:tree/repo repo
+(defn tree-post [_ {{jgit-repo :repo/jgit :as repo} :repo
+                     body :body}]
+  {:tree/repo (:db/id repo)
    :tree/sha (jgit/create-tree! jgit-repo body)})
 
 (def tree-resource
   {:body-fn tree-body
-   :lookup-fn tree-lookup
-   :post-fn tree-post
+   :lookup-fn (handlers/db-lookup-fn tree-key) 
+   :post-fn (handlers/db-transact-fn tree-post)
    :post-schema [:map
                  [:path-params [:map
                                 [:org :string]
