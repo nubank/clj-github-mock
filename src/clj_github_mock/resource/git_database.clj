@@ -2,131 +2,185 @@
   (:require [clj-github-mock.impl.jgit :as jgit]
             [datascript.core :as d]
             [clj-github-mock.handlers :as handlers]
-            [clj-github-mock.resource.repo :as repo]))
+            [clj-github-mock.resource.generators :as resource-gen]
+            [clojure.test.check.generators :as gen]))
 
-(def db-schema {:tree/repo+sha {:db/tupleAttrs [:tree/repo :tree/sha]
-                                :db/unique :db.unique/identity}
-                :tree/repo {:db/type :db.type/ref}
-                :tree/base {:db/type :db.type/ref}
-                :commit/repo+sha {:db/tupleAttrs [:commit/repo :commit/sha]
-                                  :db/unique :db.unique/identity}
-                :commit/repo {:db/type :db.type/ref}
-                :commit/tree {:db/type :db.type/ref}
-                :commit/parents {:db/type :db.type/ref
-                                 :db/cardinality :db.cardinality/many}
-                :branch/repo+name {:db/tupleAttrs [:branch/repo :branch/name]
-                                   :db/unique :db.unique/identity}
-                :branch/repo {:db/type :db.type/ref}
-                :branch/commit {:db/type :db.type/ref}})
+(defn tree-items [{:tree/keys [repo sha]}]
+  (:tree (jgit/get-tree (:repo/jgit repo) sha)))
 
-(defn tree-body [tree]
-  (jgit/get-tree (-> tree :tree/repo :repo/jgit) (:tree/sha tree)))
+(defn tree-gen [tree]
+  (gen/let [content resource-gen/github-tree]
+    (assoc tree :tree/content content)))
 
-(defn tree-key [_ {{:keys [sha]} :path-params
-                   repo :repo}]
-  [:tree/repo+sha [(:db/id repo) sha]])
-
-(defn tree-post [_ {{jgit-repo :repo/jgit :as repo} :repo
-                    body :body}]
-  {:tree/repo (:db/id repo)
-   :tree/sha (jgit/create-tree! jgit-repo body)})
+(defn tree-transact [db tree]
+  (let [git-repo (-> (d/entity db (:tree/repo tree)) :repo/jgit)
+        sha (jgit/create-tree! git-repo {:tree (:tree/content tree)})]
+    [(-> tree
+         (assoc :tree/sha sha)
+         (dissoc :tree/content))]))
 
 (def tree-resource
-  {:body-fn tree-body
-   :lookup-fn (handlers/db-lookup-fn tree-key)
-   :post-fn (handlers/db-transact-fn tree-post)
-   :post-schema [:map
-                 [:path-params [:map
-                                [:org :string]
-                                [:repo :string]]]
-                 [:body [:map
-                         [:tree [:vector
-                                 [:map
-                                  [:path :string]
-                                  [:mode [:enum "100644" "100755" "040000"]]
-                                  [:type [:enum "blob" "tree"]]
-                                  [:sha {:optional true} :string]
-                                  [:content {:optional true} :string]]]]
-                         [:base_tree {:optional true} :string]]]]})
+  {:resource/name :tree
+   :specmonstah/bind-gen-fn tree-gen
+   :specmonstah/transact-fn tree-transact
+   :resource/attributes
+   [{:attribute/name :id
+     :attribute/schema :uuid
+     :attribute/unique :db.unique/identity
+     :attribute/auto-gen? true
+     :attribute/internal? true
+     :specmonstah/key? true}
+    {:attribute/name :repo
+     :attribute/ref {:resource/name :repo}
+     :attribute/internal? true}
+    {:attribute/name :sha}
+    {:attribute/name :repo+sha
+     :attribute/tuppleAttrs [:tree/repo :tree/sha]
+     :attribute/unique :db.unique/identity
+     :attribute/internal? true}
+    {:attribute/name :tree
+     :attribute/formula tree-items}]})
 
-(defn commit-body [commit]
-  (jgit/get-commit (-> commit :commit/repo :repo/jgit) (:commit/sha commit)))
+(defn tree-key [db {{:keys [owner repo sha]} :path-params}]
+  [:tree/repo+sha [(d/entid db [:repo/owner+name [(d/entid db [:owner/name owner]) repo]]) sha]])
 
-(defn commit-key [_ {{:keys [sha]} :path-params
-                     repo :repo}]
-  [:commit/repo+sha [(:db/id repo) sha]])
+(defn tree-post [db {{:keys [owner repo]} :path-params
+                     body :body}]
+  (let [{repo-id :db/id jgit-repo :repo/jgit} (d/entity db [:repo/owner+name [(d/entid db [:owner/name owner]) repo]])]
+    {:repo repo-id
+     :sha (jgit/create-tree! jgit-repo body)}))
 
-(defn commit-post [_ {{jgit-repo :repo/jgit :as repo} :repo
-                      body :body}]
-  {:commit/repo (:db/id repo)
-   :commit/sha (jgit/create-commit! jgit-repo body)})
+(defn commit-message [{:commit/keys [repo sha]}]
+  (:message (jgit/get-commit (:repo/jgit repo) sha)))
+
+(defn commit-transact [db commit]
+  (let [git-repo (-> (d/entity db (:commit/repo commit)) :repo/jgit)
+        tree (d/entity db (:commit/tree commit))
+        sha (jgit/create-commit! git-repo {:tree (:tree/sha tree)
+                                           :message (:commit/message commit)})]
+    [(assoc commit :commit/sha sha)]))
+
+(defn commit-gen [commit]
+  (gen/let [message gen/string]
+    (assoc commit :commit/message message)))
 
 (def commit-resource
-  {:body-fn commit-body
-   :lookup-fn (handlers/db-lookup-fn commit-key)
-   :post-fn (handlers/db-transact-fn commit-post)
-   :post-schema [:map
-                 [:path-params [:map
-                                [:org :string]
-                                [:repo :string]]]
-                 [:body [:map
-                         [:message :string]
-                         [:tree :string]
-                         [:parents {:optional true} [:vector :string]]]]]})
+  {:resource/name :commit
+   :specmonstah/bind-gen-fn commit-gen
+   :specmonstah/transact-fn commit-transact
+   :resource/attributes
+   [{:attribute/namespace :object
+     :attribute/name :node_id
+     :attribute/schema :uuid
+     :attribute/unique :db.unique/identity
+     :attribute/auto-gen? true
+     :specmonstah/key? true}
+    {:attribute/name :repo
+     :attribute/ref {:resource/name :repo}
+     :attribute/internal? true}
+    {:attribute/name :sha}
+    {:attribute/name :repo+sha
+     :attribute/tuppleAttrs [:commit/repo :commit/sha]
+     :attribute/unique :db.unique/identity
+     :attribute/internal? true}
+    {:attribute/name :tree
+     :attribute/ref {:resource/name :tree}}
+    {:attribute/name :message
+     :attribute/formula commit-message}
+    {:attribute/name :parents
+     :attribute/ref {:resource/name :commit}
+     :attribute/cardinality :db.cardinality/many}]})
 
-(defn ref-key [db {{:keys [org repo ref]} :path-params}]
-  [:branch/repo+name [(d/entid db [:repo/org+name [(d/entid db [:org/name org]) repo]])
-                      (second (re-find #"heads/(.*)" ref))]])
+(defn commit-key [db {{:keys [owner repo sha]} :path-params}]
+  [:commit/repo+sha [(d/entid db [:repo/owner+name [(d/entid db [:owner/name owner]) repo]]) sha]])
 
-(defn ref-body [ref]
-  {:ref (str "refs/heads/" (:branch/name ref))
-   :object {:type :commit
-            :sha (-> ref :branch/commit :commit/sha)}})
+(defn commit-post [db {{:keys [owner repo]} :path-params body :body}]
+  (let [{repo-id :db/id jgit-repo :repo/jgit} (d/entity db [:repo/owner+name [(d/entid db [:owner/name owner]) repo]])]
+    {:repo repo-id
+     :sha (jgit/create-commit! jgit-repo body)
+     :tree (d/entid db [:tree/repo+sha [repo-id (:tree body)]])
+     :parents (map #(d/entid db [:commit/repo+sha [repo-id %]]) (:parents body))}))
 
-(defn ref-post [db {:keys [repo body]}]
-  {:branch/repo (:db/id repo)
-   :branch/name (second (re-find #"refs/heads/(.*)" (:ref body)))
-   :branch/commit (d/entid db [:commit/repo+sha [(:db/id repo) (:sha body)]])})
+(defn ref-full-name [{:ref/keys [type name]}]
+  (format
+   "refs/%s/%s"
+   (case type
+     :branch "heads"
+     :tag "tags")
+   name))
 
-(defn ref-patch [db {:keys [repo body]
-                     {:keys [ref]} :path-params}]
-  (let [key [(:db/id repo) (second (re-find #"heads/(.*)" ref))]
-        current-sha (-> (d/entity db [:branch/repo+name key]) :branch/commit :commit/sha)
+(defn ref-object [{:ref/keys [commit]}]
+  {:type :commit
+   :sha (:commit/sha commit)})
+
+(def ref-resource
+  {:resource/name :ref
+   :resource/attributes
+   [{:attribute/name :node_id
+     :attribute/schema :uuid
+     :attribute/unique :db.unique/identity
+     :attribute/auto-gen? true
+     :specmonstah/key? true}
+    {:attribute/name :repo
+     :attribute/ref {:resource/name :repo}
+     :attribute/internal? true}
+    {:attribute/name :name
+     :attribute/schema [:string {:gen/gen (resource-gen/unique-object-name)}]}
+    {:attribute/name :type
+     :attribute/schema [:enum :branch :tag]
+     :attribute/internal? true}
+    {:attribute/name :repo+type+name
+     :attribute/tuppleAttrs [:ref/repo :ref/type :ref/name]
+     :attribute/unique :db.unique/identity
+     :attribute/internal? true}
+    {:attribute/name :commit
+     :attribute/ref {:resource/name :commit}
+     :attribute/internal? true}
+    {:attribute/name :ref
+     :attribute/formula ref-full-name}
+    {:attribute/name :object
+     :attribute/formula ref-object}]})
+
+(defn ref-parts [ref-full-name]
+  (let [[_ type-name name] (re-find #"refs/(.*)/(.*)" ref-full-name)]
+    {:name name
+     :type (case type-name
+             "heads" :branch
+             "tags" :tag)}))
+
+(defn ref-key [db {{:keys [owner repo ref]} :path-params}]
+  (let [{:keys [type name]} (ref-parts (str "refs/" ref))]
+    [:ref/repo+type+name [(d/entid db [:repo/owner+name [(d/entid db [:owner/name owner]) repo]])
+                          type
+                          name]]))
+
+(defn ref-post [db {{:keys [owner repo]} :path-params body :body}]
+  (let [{repo-id :db/id} (d/entity db [:repo/owner+name [(d/entid db [:owner/name owner]) repo]])
+        {:keys [name type]} (ref-parts (:ref body))]
+    {:repo repo-id
+     :name name
+     :type type
+     :commit (d/entid db [:commit/repo+sha [repo-id (:sha body)]])}))
+
+(defn ref-patch [db {{:keys [owner repo ref]} :path-params body :body}]
+  (let [{:keys [type name]} (ref-parts (str "refs/" ref))
+        {repo-id :db/id jgit-repo :repo/jgit} (d/entity db [:repo/owner+name [(d/entid db [:owner/name owner]) repo]])
+        key [repo-id type name]
+        current-sha (-> (d/entity db [:ref/repo+type+name key]) :ref/commit :commit/sha)
         new-sha (:sha body)
-        base (jgit/merge-base (:repo/jgit repo) current-sha new-sha)]
+        base (jgit/merge-base jgit-repo current-sha new-sha)]
     (if (or (:force body) (= current-sha base))
-      {:branch/repo+name key
-       :branch/commit (d/entid db [:commit/repo+sha [(:db/id repo) (:sha body)]])}
+      {:repo+type+name key
+       :commit (d/entid db [:commit/repo+sha [repo-id (:sha body)]])}
       (throw (ex-info "not fast forward" {})))))
 
-(def ref-resource {:body-fn ref-body
-                   :lookup-fn (handlers/db-lookup-fn ref-key)
-                   :post-fn (handlers/db-transact-fn ref-post)
-                   :post-schema [:map
-                                 [:path-params [:map
-                                                [:org :string]
-                                                [:repo :string]]]
-                                 [:body [:map
-                                         [:ref :string]
-                                         [:sha :string]]]]
-                   :patch-fn (handlers/db-transact-fn ref-patch)
-                   :patch-schema [:map
-                                  [:path-params [:map
-                                                 [:org :string]
-                                                 [:repo :string]
-                                                 [:ref :string]]]
-                                  [:body [:map
-                                          [:sha :string]]]]
-                   :delete-fn (handlers/db-delete-fn ref-key)})
-
-(def routes
-  [["/repos/:org/:repo" {:middleware [repo/repo-middleware]}
-
-    ["/git/trees" {:post (handlers/post-handler tree-resource)}]
-    ["/git/trees/:sha" {:get (handlers/get-handler tree-resource)}]
-    ["/git/commits" {:post (handlers/post-handler commit-resource)}]
-    ["/git/commits/:sha" {:get (handlers/get-handler commit-resource)}]
-    ["/git/refs" {:post (handlers/post-handler ref-resource)}]
-    ["/git/refs/*ref" {:patch (handlers/patch-handler ref-resource)
-                       :delete (handlers/delete-handler ref-resource)}]
-    ["/git/ref/*ref" {:get (handlers/get-handler ref-resource)}]]])
+(defn routes [meta-db]
+  [["/repos/:owner/:repo"
+    ["/git/trees" {:post (handlers/post-resource-handler meta-db :tree tree-post)}]
+    ["/git/trees/:sha" {:get (handlers/get-resource-handler meta-db :tree tree-key)}]
+    ["/git/commits" {:post (handlers/post-resource-handler meta-db :commit commit-post)}]
+    ["/git/commits/:sha" {:get (handlers/get-resource-handler meta-db :commit commit-key)}]
+    ["/git/refs" {:post (handlers/post-resource-handler meta-db :ref ref-post)}]
+    ["/git/refs/*ref" {:patch (handlers/patch-resource-handler meta-db :ref ref-key ref-patch)
+                       :delete (handlers/delete-resource-handler meta-db :ref ref-key)}]
+    ["/git/ref/*ref" {:get (handlers/get-resource-handler meta-db :ref ref-key)}]]])

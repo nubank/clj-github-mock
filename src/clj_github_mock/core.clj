@@ -18,8 +18,9 @@
   `default_branch` is optional and will default to \"main\".
   "
   [{:keys [initial-state] :as _opts}]
-  (-> (api/conn initial-state)
-      (api/json-handler)))
+  (let [meta-db (api/meta-db)
+        conn (api/conn meta-db initial-state)]
+    (api/json-handler meta-db conn)))
 
 (defn httpkit-fake-handler
   "Creates a `ring-handler` that is compatible with `http-kit-fake`. Receives the same

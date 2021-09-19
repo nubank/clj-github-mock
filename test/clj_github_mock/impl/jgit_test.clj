@@ -1,5 +1,5 @@
 (ns clj-github-mock.impl.jgit-test
-  (:require [clj-github-mock.generators :as mock-gen]
+  (:require [clj-github-mock.resource.generators :as mock-gen]
             [clj-github-mock.impl.jgit :as sut]
             [clojure.test.check.clojure-test :refer [defspec]]
             [clojure.test.check.generators :as gen]

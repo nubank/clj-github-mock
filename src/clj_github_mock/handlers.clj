@@ -1,7 +1,8 @@
 (ns clj-github-mock.handlers
   (:require [datascript.core :as d]
-            [malli.core :as m]
-            [malli.error :as me])
+            [malli.core :as malli]
+            [malli.error :as malli.error]
+            [medley.core :as m])
   (:import [clojure.lang ExceptionInfo]))
 
 (defn db-transact-fn [transaction-fn]
@@ -28,8 +29,8 @@
 
 (defn post-handler [{:keys [post-fn post-schema body-fn] :or {post-schema :any}}]
   (fn [request]
-    (let [error (-> (m/explain post-schema request)
-                    (me/humanize))]
+    (let [error (-> (malli/explain post-schema request)
+                    (malli.error/humanize))]
       (if-not error
         (try
           (let [result (post-fn request)]
@@ -52,8 +53,8 @@
 (defn patch-handler [{:keys [lookup-fn patch-fn patch-schema body-fn] :or {patch-schema :any}}]
   (fn [request]
     (if (lookup-fn request)
-      (let [error (-> (m/explain patch-schema request)
-                      (me/humanize))]
+      (let [error (-> (malli/explain patch-schema request)
+                      (malli.error/humanize))]
         (if-not error
           (try
             (let [result (patch-fn request)]
@@ -80,3 +81,120 @@
         (delete-fn request)
         {:status 204})
       {:status 404})))
+
+(defn attribute-full-name [resource attribute]
+  (keyword (name (:resource/name resource))
+           (name (:attribute/name attribute))))
+
+(defn resource-attribute [resource attribute-name]
+  (m/find-first
+   #(= attribute-name (:attribute/name %))
+   (:resource/attributes resource)))
+
+(declare unmarshall-attr)
+
+(defn unmarshall-tupple [resource {:attribute/keys [tuppleAttrs]} db value]
+  (mapv (fn [[tupple-attr tupple-val]]
+          (unmarshall-attr resource tupple-attr db tupple-val))
+        (as-> (map #(resource-attribute resource (keyword (name %))) tuppleAttrs) $
+          (interleave $ value)
+          (partition 2 $))))
+
+(defn unmarshall-attr [resource {:attribute/keys [tuppleAttrs] :as attribute} db value]
+  (cond
+    tuppleAttrs (unmarshall-tupple resource attribute db value)
+    :else value))
+
+(defn unmarshall [resource db payload]
+  (m/map-kv
+   (fn [k v]
+     (let [attr (resource-attribute resource k)]
+       [(attribute-full-name resource attr)
+        (unmarshall-attr resource attr db v)]))
+   payload))
+
+(defn resource-transact-fn [resource handler]
+  (fn [db request]
+    (unmarshall resource db (handler db request))))
+
+(defn post-attribute-schema [{:attribute/keys [name required? schema]}]
+  [name {:optional (not required?)} (or schema :any)])
+
+(defn patch-attribute-schema [{:attribute/keys [name schema]}]
+  [name {:optional true} (or schema :any)])
+
+(defn payload-schema [resource attribute-fn]
+  `[:map
+    [:body [:map
+            ~@(->> (map attribute-fn (:resource/attributes resource))
+                   (remove nil?)
+                   (into []))]]])
+
+(defn post-schema [resource]
+  (payload-schema resource post-attribute-schema))
+
+(defn patch-schema [resource]
+  (payload-schema resource patch-attribute-schema))
+
+(declare resource-body-fn)
+
+; TODO handle cardinality many
+(defn marshall-attr [resource {:attribute/keys [ref internal? formula cardinality] :as attribute} entity]
+  (when-not (or internal? (= :db.cardinality/many cardinality))
+    (cond
+      ref (apply (resource-body-fn ref) [(get entity (attribute-full-name resource attribute))])
+      formula (formula entity)
+      :else (get entity (attribute-full-name resource attribute)))))
+
+(defn resource-body-fn [resource]
+  (fn [entity]
+    (reduce
+     (fn [result attribute]
+       (if-let [v (marshall-attr resource attribute entity)]
+         (assoc result (:attribute/name attribute) v)
+         result))
+     {}
+     (:resource/attributes resource))))
+
+(defn default-value [default]
+  (if (fn? default)
+    (default)
+    default))
+
+(defn add-defaults [resource handler]
+  (fn [db request]
+    (let [payload (handler db request)]
+      (reduce
+       (fn [result {:attribute/keys [name default]}]
+         (if (and default (not (get result name)))
+           (assoc result name (default-value default))
+           result))
+       payload
+       (:resource/attributes resource)))))
+
+(defn post-resource-handler [meta-db resource-name handler]
+  (let [resource (d/entity meta-db [:resource/name resource-name])]
+    (post-handler {:post-fn (db-transact-fn (resource-transact-fn resource (add-defaults resource handler))) ; TODO handle auto-gen
+                   :post-schema (post-schema resource)
+                   :body-fn (resource-body-fn resource)})))
+
+(defn patch-resource-handler [meta-db resource-name key-fn handler]
+  (let [resource (d/entity meta-db [:resource/name resource-name])]
+    (patch-handler {:patch-fn (db-transact-fn (resource-transact-fn resource handler))
+                    :patch-schema (patch-schema resource)
+                    :body-fn (resource-body-fn resource)
+                    :lookup-fn (db-lookup-fn key-fn)})))
+
+(defn get-resource-handler [meta-db resource-name key-fn]
+  (let [resource (d/entity meta-db [:resource/name resource-name])]
+    (get-handler {:lookup-fn (db-lookup-fn key-fn)
+                  :body-fn (resource-body-fn resource)})))
+
+(defn delete-resource-handler [_meta-db _resource key-fn]
+  (delete-handler {:lookup-fn (db-lookup-fn key-fn)
+                   :delete-fn (db-delete-fn key-fn)}))
+
+(defn list-resource-handler [meta-db resource-name list-fn]
+  (let [resource (d/entity meta-db [:resource/name resource-name])]
+    (list-handler {:list-fn (db-list-fn list-fn)
+                   :body-fn (resource-body-fn resource)})))
