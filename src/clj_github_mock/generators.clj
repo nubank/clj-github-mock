@@ -108,12 +108,10 @@
     (zipmap ents
             (map (partial ent-data ent-db) ents))))
 
-(defn ents [query]
+(defn ents [meta-db conn query]
   (gen/->Generator
    (fn [rnd size]
-     (let [meta-db (resource/meta-db)
-           conn (resource/conn meta-db {})
-           schema (meta-db->specmonstah-schema meta-db)
+     (let [schema (meta-db->specmonstah-schema meta-db)
            ent-db (-> (ent-db-malli-gen {:schema schema
                                          :gen-options {:rnd-state (atom rnd)
                                                        :size size}}
@@ -127,5 +125,10 @@
           :db @conn
           :ents (ent-attrs-map ent-db)}))))))
 
-(defn gen-ents [query]
-  (gen/generate (ents query)))
+(defn gen-ents
+  ([query]
+   (let [meta-db (resource/meta-db)
+         conn (resource/conn meta-db {})]
+     (gen-ents meta-db conn query)))
+  ([meta-db conn query]
+   (gen/generate (ents meta-db conn query))))

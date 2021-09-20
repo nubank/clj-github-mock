@@ -10,8 +10,8 @@
 (defn httpkit-fake-handler
   "Creates a `ring-handler` that is compatible with `http-kit-fake`. Receives the same
   options as `ring-handler."
-  [conn]
-  (let [handler (mock-resource/json-handler conn)]
+  [meta-db conn]
+  (let [handler (mock-resource/json-handler meta-db conn)]
     (fn [_ {:keys [method url body headers] :as req} _]
       (handler (merge (reduce
                        (fn [req [header value]]
@@ -24,21 +24,21 @@
 (defmacro flow [& flows]
   `(flow/flow
     "github-outer"
-    [:let [schema# (mock-gen/schema)
-           conn# (mock-gen/conn schema#)]]
-    (flow/swap-state assoc ::conn conn# ::schema schema#)
+    [:let [meta-db# (mock-resource/meta-db)
+           conn# (mock-resource/conn meta-db# {})]]
+    (flow/swap-state assoc ::conn conn# ::meta-db meta-db#)
     (state/wrap-with
      (fn [f#]
        (fake/with-fake-http
-         [#"^https://api.github.com/.*" (httpkit-fake-handler conn#)]
+         [#"^https://api.github.com/.*" (httpkit-fake-handler meta-db# conn#)]
          (f#)))
      (flow/flow "github-inner"
                 ~@flows))))
 
 (defn gen-ents [query]
   (flow/get-state
-   (fn [{conn ::conn schema ::schema}]
-     (mock-gen/gen-ents conn schema query))))
+   (fn [{conn ::conn meta-db ::meta-db}]
+     (mock-gen/gen-ents conn meta-db query))))
 
 (defn q [datalog & args]
   (flow/get-state
