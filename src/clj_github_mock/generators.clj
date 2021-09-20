@@ -120,7 +120,7 @@
        (rose/pure
         (merge
          {:conn conn
-          :handler (resource/handler meta-db conn)
+          :handler (resource/handler meta-db conn (atom []))
           :ent-db ent-db
           :db @conn
           :ents (ent-attrs-map ent-db)}))))))

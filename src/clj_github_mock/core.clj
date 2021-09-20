@@ -20,7 +20,7 @@
   [{:keys [initial-state] :as _opts}]
   (let [meta-db (api/meta-db)
         conn (api/conn meta-db initial-state)]
-    (api/json-handler meta-db conn)))
+    (api/json-handler meta-db conn (atom []))))
 
 (defn httpkit-fake-handler
   "Creates a `ring-handler` that is compatible with `http-kit-fake`. Receives the same

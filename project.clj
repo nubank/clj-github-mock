@@ -31,12 +31,12 @@
                  [lambdaisland/regal "0.0.97"]
                  [nubank/state-flow "5.13.3"]
                  [http-kit.fake "0.2.1"]
-                 [http-kit "2.5.3"]]
+                 [http-kit "2.5.3"]
+                 [nubank/matcher-combinators "3.1.4"]]
 
   :profiles {:dev {:plugins [[lein-project-version "0.1.0"]]
                    :dependencies [[clj-http "3.12.1"]
                                   [clj-http-fake "1.0.3"]
-                                  [nubank/matcher-combinators "3.1.4"]
                                   [juji/editscript "0.5.7"]]}}
 
   :aliases {"coverage" ["cloverage" "-s" "coverage"]

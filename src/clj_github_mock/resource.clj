@@ -7,7 +7,8 @@
             [reitit.ring :as ring]
             [datascript.core :as d]
             [ring.middleware.json :as middleware.json]
-            [medley.core :as m]))
+            [medley.core :as m]
+            [matcher-combinators.standalone :refer [match?]]))
 
 (def meta-db-schema
   {:resource/name {:db/unique :db.unique/identity
@@ -83,16 +84,78 @@
   (fn [request]
     (handler (assoc request :conn conn))))
 
-(defn handler [meta-db conn]
+(defprotocol ReqPattern
+  (req-fn [pattern]))
+
+(extend-protocol ReqPattern
+  clojure.lang.IPersistentMap
+  (req-fn [pattern]
+    (fn [request]
+      (match? pattern request))))
+
+(extend-protocol ReqPattern
+  java.util.regex.Pattern
+  (req-fn [pattern]
+    (fn [request]
+      (re-find pattern (:url request)))))
+
+(extend-protocol ReqPattern
+  java.lang.String
+  (req-fn [pattern]
+    (fn [request]
+      (= pattern (:url request)))))
+
+(extend-protocol ReqPattern
+  clojure.lang.IFn
+  (req-fn [pattern]
+    pattern))
+
+(defn decorator-match? [req-pattern request]
+  (let [fun (req-fn req-pattern)]
+    (fun request)))
+
+(defprotocol RespPattern
+  (decorator [pattern]))
+
+(extend-protocol RespPattern
+  clojure.lang.IPersistentMap
+  (decorator [pattern]
+    (fn [_ _]
+      pattern)))
+
+(extend-protocol RespPattern
+  clojure.lang.IFn
+  (decorator [pattern]
+    pattern))
+
+(extend-protocol RespPattern
+  Long
+  (decorator [pattern]
+    (fn [_ _]
+      {:status pattern})))
+
+(defn run-decorator [request handler [req resp]]
+  (when (decorator-match? req request)
+    (apply (decorator resp) [handler request])))
+
+(defn decorator-middleware [handler state]
+  (fn [request]
+    (some
+     (partial run-decorator request handler)
+     (concat (partition 2 @state)
+             [[(constantly true) (fn [handler request] (handler request))]]))))
+
+(defn handler [meta-db conn middleware]
   (-> (ring/ring-handler
        (ring/router (concat
                      (repo/routes meta-db)
                      (git-database/routes meta-db)))
        (ring/create-default-handler))
+      (decorator-middleware middleware)
       (middleware.params/wrap-params)
       (conn-middleware conn)))
 
-(defn json-handler [meta-db conn]
-  (-> (handler meta-db conn)
+(defn json-handler [meta-db conn middleware]
+  (-> (handler meta-db conn middleware)
       (middleware.json/wrap-json-body {:keywords? true})
       (middleware.json/wrap-json-response)))

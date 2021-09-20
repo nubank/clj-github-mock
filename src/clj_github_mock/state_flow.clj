@@ -25,15 +25,28 @@
   `(flow/flow
     "github-outer"
     [:let [meta-db# (mock-resource/meta-db)
-           conn# (mock-resource/conn meta-db# {})]]
-    (flow/swap-state assoc ::conn conn# ::meta-db meta-db#)
+           conn# (mock-resource/conn meta-db# {})
+           middleware# (atom [])]]
+    (flow/swap-state assoc ::conn conn# ::meta-db meta-db# ::midleware middleware#)
     (state/wrap-with
      (fn [f#]
        (fake/with-fake-http
-         [#"^https://api.github.com/.*" (httpkit-fake-handler meta-db# conn#)]
+         [#"^https://api.github.com/.*" (httpkit-fake-handler meta-db# conn# middleware#)]
          (f#)))
      (flow/flow "github-inner"
                 ~@flows))))
+
+; TODO return to previous state instead of resetting
+(defn with-middleware [pairs flow]
+  (flow/flow
+   "github-midleware"
+   (flow/get-state
+    (fn [{middleware ::midleware}]
+      (reset! middleware pairs)))
+   flow
+   (flow/get-state
+    (fn [{middleware ::middleware}]
+      (reset! middleware [])))))
 
 (defn gen-ents [query]
   (flow/get-state
