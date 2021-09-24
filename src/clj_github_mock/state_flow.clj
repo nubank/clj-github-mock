@@ -4,7 +4,7 @@
             [state-flow.api :as flow]
             [clj-github-mock.resource :as mock-resource]
             [ring.mock.request :as mock.request]
-            [clj-github-mock.generators1 :as mock-gen]
+            [clj-github-mock.generators :as mock-gen]
             [datascript.core :as d]))
 
 (defn httpkit-fake-handler
