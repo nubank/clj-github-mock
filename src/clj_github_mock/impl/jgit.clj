@@ -243,11 +243,11 @@
                            (.setParentIds (into-array ObjectId (map #(ObjectId/fromString %) parents))))]
       (ObjectId/toString (.insert inserter commit-builder)))))
 
-(defn create-commit-datoms! [{repo-id :db/id jgit-repo :repo/jgit :as repo} {:keys [tree message parents] :as body}]
+(defn create-commit-datoms! [{repo-id :db/id jgit-repo :repo/jgit :as repo} tree {:keys [message parents] :as body}]
   (let [db (d/entity-db repo)]
     {:object/repo repo-id
      :object/type "commit"
-     :commit/tree (d/entid db [:object/repo+type+sha [repo-id "tree" tree]])
+     :commit/tree tree
      :commit/message message
      :commit/parents (mapv #(d/entid db [:object/repo+type+sha [repo-id "commit" %]]) parents)
      :object/sha (create-commit! jgit-repo body)}))

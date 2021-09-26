@@ -82,12 +82,14 @@
    body))
 
 (defn commit-transact [db commit]
-  [(merge
-    commit
-    (jgit/create-commit-datoms!
-     (d/entity db (:object/repo commit))
-     {:tree (-> (d/entity db (:commit/tree commit)) :object/sha)
-      :message (:commit/message commit)}))])
+  (let [tree (d/entity db (:commit/tree commit))]
+    [(merge
+      commit
+      (jgit/create-commit-datoms!
+       (d/entity db (:object/repo commit))
+       (:db/id tree) 
+       {:tree (:object/sha tree)
+        :message (:commit/message commit)}))]))
 
 (def commit-resource
   {:resource/name :commit
@@ -105,10 +107,12 @@
 (defn commit-key [db {{:keys [owner repo sha]} :path-params}]
   [:object/repo+type+sha [(d/entid db [:repo/owner+name [(d/entid db [:owner/name owner]) repo]]) "commit" sha]])
 
-(defn commit-post [db {{:keys [owner repo]} :path-params body :body}]
-  (jgit/create-commit-datoms!
-   (d/entity db [:repo/owner+name [(d/entid db [:owner/name owner]) repo]])
-   body))
+(defn commit-post [db {{:keys [owner repo]} :path-params {:keys [tree] :as body} :body}]
+  (let [repo (d/entity db [:repo/owner+name [(d/entid db [:owner/name owner]) repo]])]
+    (jgit/create-commit-datoms!
+     repo 
+     (d/entid db [:object/repo+type+sha [(:db/id repo) "tree" tree]])
+     body)))
 
 (defn ref-full-name [{:ref/keys [type name]}]
   (format

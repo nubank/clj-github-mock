@@ -94,6 +94,24 @@
              (jgit/get-content git-repo sha path)
              "UTF-8")})
 
+(defn commit-body [commit]
+  {:sha (:object/sha commit)
+   :message (:commit/message commit)})
+
+(defn content-put [db {{:keys [owner repo path]} :path-params
+                        {:keys [content message branch]} :body}]
+  (let [repo' (d/entity db [:repo/owner+name (d/entity db [:owner/name owner]) repo])
+        branch' (d/entity db [:ref/repo+type+name (:db/id repo') :branch (or branch (:repo/default_branch repo'))])
+        tree (jgit/create-tree-datoms! repo' {:tree [{:path path :type "blob" :mode "100644" :content content}]})]
+    (jgit/create-commit-datoms! repo' tree {:message message
+                                            :parents [(-> branch' :ref/commit :object/sha)]})))
+
+(defn content-put-body [commit {{:keys [owner repo path]} :path-params conn :conn}]
+  (let [db @conn
+        repo' (d/entity db [:repo/owner+name [(d/entid db owner)] repo])]
+    {:content (content-body {:repo repo' :path path :sha (:object/sha commit)})
+     :commit (commit-body commit)}))
+
 (defn routes [meta-db]
   [["/orgs/:org/repos" {:get (handlers/list-resource-handler meta-db :repo repo-list)
                         :post (handlers/post-resource-handler meta-db :repo repo-post)}]
@@ -103,4 +121,6 @@
     ["/branches/:branch" {:get (handlers/get-handler {:lookup-fn (handlers/db-lookup-fn branch-key)
                                                       :body-fn branch-body})}]
     ["/contents/*path" {:get (handlers/get-handler {:lookup-fn content-lookup
-                                                    :body-fn content-body})}]]])
+                                                    :body-fn content-body})
+                        :put (handlers/post-handler {:put-fn (handlers/db-transact-fn content-put)
+                                                     :body-fn content-put-body})}]]])

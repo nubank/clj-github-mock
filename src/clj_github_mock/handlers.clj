@@ -42,6 +42,22 @@
         {:status 422
          :body error}))))
 
+; TODO return 201 when creating
+(defn put-handler [{:keys [put-fn put-schema body-fn] :or {put-schema :any}}]
+  (fn [request]
+    (let [error (-> (malli/explain put-schema request)
+                    (malli.error/humanize))]
+      (if-not error
+        (try
+          (let [result (put-fn request)]
+            {:status 200
+             :body (body-fn result request)})
+          (catch ExceptionInfo e
+            {:status 422
+             :body {:error (ex-message e)}}))
+        {:status 422
+         :body error}))))
+
 (defn get-handler [{:keys [lookup-fn body-fn]}]
   (fn [request]
     (let [object (lookup-fn request)]
