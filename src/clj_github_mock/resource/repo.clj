@@ -62,8 +62,8 @@
 
 (defn branch-body [ref]
   {:name (:ref/name ref)
-   :commit {:sha (-> ref :ref/commit :commit/sha)
-            :commit (-> (jgit/get-commit (:repo/jgit (:ref/repo ref)) (-> ref :ref/commit :commit/sha))
+   :commit {:sha (-> ref :ref/commit :object/sha)
+            :commit (-> (jgit/get-commit (:repo/jgit (:ref/repo ref)) (-> ref :ref/commit :object/sha))
                         (dissoc :sha))}})
 
 (defn- sha? [ref]
@@ -74,7 +74,7 @@
   (if (sha? ref)
     ref
     (let [branch (or ref default_branch)]
-      (:commit/sha (:ref/commit (d/entity db [:ref/repo+type+name [repo-id :branch branch]]))))))
+      (:object/sha (:ref/commit (d/entity db [:ref/repo+type+name [repo-id :branch branch]]))))))
 
 (defn content-lookup [{{:keys [owner repo path]} :path-params
                        {:strs [ref]} :query-params

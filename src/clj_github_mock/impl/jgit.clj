@@ -1,6 +1,7 @@
 (ns clj-github-mock.impl.jgit
   (:require [clojure.set :as set]
-            [clojure.string :as string])
+            [clojure.string :as string]
+            [datascript.core :as d])
   (:import [org.eclipse.jgit.internal.storage.dfs DfsRepositoryDescription InMemoryRepository]
            [org.eclipse.jgit.lib AnyObjectId CommitBuilder Constants FileMode ObjectId ObjectReader PersonIdent TreeFormatter]
            [org.eclipse.jgit.revwalk RevCommit RevWalk]
@@ -157,6 +158,57 @@
     (with-inserter [inserter repo]
       (ObjectId/toString (insert-tree repo inserter final-tree base_tree)))))
 
+(declare create-tree-object!)
+
+(defn create-blob-datoms! [inserter {repo-id :db/id} {:keys [content] :as item}]
+  {:object/repo repo-id
+   :object/type "blob"
+   :object/sha (ObjectId/toString (insert-blob inserter item))
+   :blob/utf-8-content content})
+
+; TODO support commit
+(defn create-object! [inserter repo {:keys [type base_tree content] :as item}]
+  (case type
+    "blob" (create-blob-datoms! inserter repo item)
+    "tree" (create-tree-object! inserter repo base_tree content)))
+
+(defn create-tree-item-datoms! [inserter tree-formatter {repo-id :db/id :as repo} {:keys [path type content sha mode] :as item}]
+  (when (or content sha)
+    (let [object (if sha
+                   (d/entid (d/entity-db repo) [:object/repo+type+sha repo-id type sha])
+                   (create-object! inserter repo item))]
+      (.append tree-formatter
+               path
+               (github-mode->file-mode mode)
+               (ObjectId/fromString (or sha (:object/sha object))))
+      {:tree-item/path path
+       :tree-item/mode mode
+       :tree-item/object object}))) ;; TODO add delete
+
+(defn create-tree-items-datoms! [inserter {jgit-repo :repo/jgit :as repo} base_tree tree]
+  (let [tree-formatter (TreeFormatter.)
+        tree' (if base_tree
+                (merge-trees (tree-walk-seq (tree-walk jgit-repo base_tree))
+                             tree)
+                tree)
+        tree-items (mapv (partial create-tree-item-datoms! inserter tree-formatter repo) tree')
+        sha (ObjectId/toString (.insertTo tree-formatter inserter))]
+    {:tree-items (remove nil? tree-items)
+     :sha sha}))
+
+(defn create-tree-object! [inserter {repo-id :db/id :as repo} base_tree tree]
+  (let [{:keys [sha tree-items]} (create-tree-items-datoms! inserter repo base_tree tree)]
+    {:object/repo repo-id
+     :object/type "tree"
+     :object/sha sha
+     :tree/tree tree-items}))
+
+(defn create-tree-datoms! [{jgit-repo :repo/jgit :as repo} {:keys [tree base_tree]}]
+  (let [final-tree (-> (tree-items->tree-map tree)
+                       (tree-map->tree-items jgit-repo base_tree))]
+    (with-inserter [inserter jgit-repo]
+      (create-tree-object! inserter repo base_tree final-tree))))
+
 ;; only for testing - start
 (declare tree-content)
 
@@ -190,6 +242,15 @@
                            (.setCommitter (PersonIdent. "me" "me@example.com"))
                            (.setParentIds (into-array ObjectId (map #(ObjectId/fromString %) parents))))]
       (ObjectId/toString (.insert inserter commit-builder)))))
+
+(defn create-commit-datoms! [{repo-id :db/id jgit-repo :repo/jgit :as repo} {:keys [tree message parents] :as body}]
+  (let [db (d/entity-db repo)]
+    {:object/repo repo-id
+     :object/type "commit"
+     :commit/tree (d/entid db [:object/repo+type+sha [repo-id "tree" tree]])
+     :commit/message message
+     :commit/parents (mapv #(d/entid db [:object/repo+type+sha [repo-id "commit" %]]) parents)
+     :object/sha (create-commit! jgit-repo body)}))
 
 (defn- object-id [reader sha path]
   (let [commit (RevCommit/parse (load-object reader (ObjectId/fromString sha)))

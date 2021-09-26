@@ -16,6 +16,7 @@
    :resource/attributes {:db/type :db.type/ref
                          :db/cardinality :db.cardinality/many
                          :db/doc "The attributes of the resource"}
+   :resource/extends {:db/type :db.type/ref}
    :attribute/name {:db/doc "The name of the attribute"}
    :attribute/schema {:db/doc "A malli schema that will be used to validate the attribute"}
    :attribute/unique {:db/doc "Either :identity or :value as in datomic"}
@@ -33,14 +34,28 @@
   (-> (d/empty-db meta-db-schema)
       (d/db-with [org/owner-resource
                   repo/repo-resource
+                  git-database/object-resource
+                  git-database/blob-resource
+                  git-database/tree-item-resource
                   git-database/tree-resource
                   git-database/commit-resource
                   git-database/ref-resource])))
+
+(defn resource [meta-db resource-name]
+  (d/entity meta-db [:resource/name resource-name]))
 
 (defn resources [meta-db]
   (->> (d/q '[:find [?e ...]
               :where
               [?e :resource/name]]
+            meta-db)
+       (map (partial d/entity meta-db))))
+
+(defn concrete-resources [meta-db]
+  (->> (d/q '[:find [?e ...]
+              :where
+              [?e :resource/name]
+              [(missing? $ ?e :resource/abstract?)]]
             meta-db)
        (map (partial d/entity meta-db))))
 
@@ -55,7 +70,7 @@
   (reduce
    (fn [result attribute]
      (assoc result
-            (handlers/attribute-full-name resource attribute)
+            (handlers/attribute-full-name attribute)
             (attribute-schema attribute)))
    {}
    (:resource/attributes resource)))

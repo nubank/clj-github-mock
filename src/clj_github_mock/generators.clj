@@ -58,15 +58,16 @@
     default [:= (handlers/default-value default)]
     schema schema))
 
-(defn- attributes-full-names [resource attributes]
-  (map (partial handlers/attribute-full-name resource) attributes))
+(defn- attributes-full-names [attributes]
+  (map handlers/attribute-full-name attributes))
 
-(defn- resource->malli-schema [{:resource/keys [attributes] :as resource}]
-  `[:map
-    ~@(->> (zipmap (attributes-full-names resource attributes)
-                   (map attribute->malli-schema attributes))
-           (m/remove-vals nil?)
-           (into []))])
+(defn- resource->malli-schema [resource]
+  (let [attributes (handlers/all-attributes resource)]
+    `[:map
+      ~@(->> (zipmap (attributes-full-names attributes)
+                     (map attribute->malli-schema attributes))
+             (m/remove-vals nil?)
+             (into []))]))
 
 (defn- resource->generator [resource]
   (let [schema (resource->malli-schema resource)
@@ -75,18 +76,20 @@
       (gen/bind malli-gen bind-gen-fn)
       malli-gen)))
 
-(defn- specmonstah-key [{:resource/keys [attributes]}]
-  (m/find-first :specmonstah/key? attributes))
+(defn- specmonstah-key [resource]
+  (m/find-first :specmonstah/key? (handlers/all-attributes resource)))
 
 ; TODO support cardinality many
+; TODO support abstract reference
 (defn- attribute->relation [{:attribute/keys [ref cardinality]}]
-  (when (and ref (not= :db.cardinality/many cardinality))
-    [(:resource/name ref) (handlers/attribute-full-name ref (specmonstah-key ref))]))
+  (when (and ref (not (:resource/abstract? ref)) (not= :db.cardinality/many cardinality))
+    [(:resource/name ref) (handlers/attribute-full-name (specmonstah-key ref))]))
 
-(defn- resource->relations [{:resource/keys [attributes] :as resource}]
-  (->> (zipmap (attributes-full-names resource attributes)
-               (map attribute->relation attributes))
-       (m/remove-vals nil?)))
+(defn- resource->relations [resource]
+  (let [attributes (handlers/all-attributes resource)]
+    (->> (zipmap (attributes-full-names attributes)
+                 (map attribute->relation attributes))
+         (m/remove-vals nil?))))
 
 (defn- resource->specmonstah-schema [resource]
   (-> {:prefix (:resource/name resource)
@@ -95,7 +98,7 @@
       (m/assoc-some :transact-fn (:specmonstah/transact-fn resource))))
 
 (defn- meta-db->specmonstah-schema [meta-db]
-  (->> (resource/resources meta-db)
+  (->> (resource/concrete-resources meta-db)
        (map (fn [resource]
               [(:resource/name resource) (resource->specmonstah-schema resource)]))
        (into {})))

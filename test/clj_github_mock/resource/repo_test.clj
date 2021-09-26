@@ -10,7 +10,7 @@
   (let [{{:keys [owner0 repo0 repo1]} :ents handler :handler} (mock-gen/gen-ents {:repo [[2]]})]
     (is (match? {:body (matchers/in-any-order [{:node_id (:repo/node_id repo0)}
                                                {:node_id (:repo/node_id repo1)}])}
-                #tap (handler (mock/request :get (format "/orgs/%s/repos" (:owner/name owner0))))))))
+                (handler (mock/request :get (format "/orgs/%s/repos" (:owner/name owner0))))))))
 
 (deftest create-repo-test
   (testing "defaults"
@@ -54,7 +54,7 @@
                         :path "some-file"
                         :content "c29tZS1jb250ZW50"}}
                 (handler (-> (mock/request :get (format "/repos/%s/%s/contents/some-file" (:owner/name owner0) (:repo/name repo0)))
-                             (mock/query-string {"ref" (:commit/sha (:ref/commit ref0))})))))
+                             (mock/query-string {"ref" (:object/sha (:ref/commit ref0))})))))
     (is (match? {:body {:type "file"
                         :path "some-file"
                         :content "c29tZS1jb250ZW50"}}

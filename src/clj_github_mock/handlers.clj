@@ -82,9 +82,15 @@
         {:status 204})
       {:status 404})))
 
-(defn attribute-full-name [resource attribute]
-  (keyword (name (:resource/name resource))
+(defn attribute-full-name [attribute]
+  (keyword (name (-> attribute :resource/_attributes first :resource/name))
            (name (:attribute/name attribute))))
+
+(defn all-attributes [resource]
+  (concat (:resource/attributes resource)
+          (if-let [parent (:resource/extends resource)]
+            (all-attributes parent)
+            [])))
 
 (defn resource-attribute [resource attribute-name]
   (m/find-first
@@ -109,7 +115,7 @@
   (m/map-kv
    (fn [k v]
      (let [attr (resource-attribute resource k)]
-       [(attribute-full-name resource attr)
+       [(attribute-full-name attr)
         (unmarshall-attr resource attr db v)]))
    payload))
 
@@ -138,23 +144,29 @@
 
 (declare resource-body-fn)
 
-; TODO handle cardinality many
-(defn marshall-attr [resource {:attribute/keys [ref internal? formula cardinality] :as attribute} entity]
-  (when-not (or internal? (= :db.cardinality/many cardinality))
-    (cond
-      ref (apply (resource-body-fn ref) [(get entity (attribute-full-name resource attribute))])
-      formula (formula entity)
-      :else (get entity (attribute-full-name resource attribute)))))
+(defn marshall-value [{:attribute/keys [ref]} value]
+  (cond
+    ref (apply (resource-body-fn ref) [value])
+    :else value))
+
+(defn marshall-attr [{:attribute/keys [internal? formula cardinality] :as attribute} entity]
+  (when-not internal?
+    (if formula
+      (formula entity)
+      (when-let [value (get entity (attribute-full-name attribute))]
+        (if (= :db.cardinality/many cardinality)
+          (mapv (partial marshall-value attribute) value)
+          (marshall-value attribute value))))))
 
 (defn resource-body-fn [resource]
   (fn [entity]
     (reduce
      (fn [result attribute]
-       (if-let [v (marshall-attr resource attribute entity)]
+       (if-let [v (marshall-attr attribute entity)]
          (assoc result (:attribute/name attribute) v)
          result))
      {}
-     (:resource/attributes resource))))
+     (all-attributes resource))))
 
 (defn default-value [default]
   (if (fn? default)
