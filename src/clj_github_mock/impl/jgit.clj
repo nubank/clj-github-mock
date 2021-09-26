@@ -175,7 +175,7 @@
 (defn create-tree-item-datoms! [inserter tree-formatter {repo-id :db/id :as repo} {:keys [path type content sha mode] :as item}]
   (when (or content sha)
     (let [object (if sha
-                   (d/entid (d/entity-db repo) [:object/repo+type+sha repo-id type sha])
+                   (d/entid (d/entity-db repo) [:object/repo+type+sha [repo-id type sha]])
                    (create-object! inserter repo item))]
       (.append tree-formatter
                path

@@ -103,12 +103,6 @@
   (req-fn [pattern]))
 
 (extend-protocol ReqPattern
-  clojure.lang.IPersistentMap
-  (req-fn [pattern]
-    (fn [request]
-      (match? pattern request))))
-
-(extend-protocol ReqPattern
   java.util.regex.Pattern
   (req-fn [pattern]
     (fn [request]
@@ -123,7 +117,10 @@
 (extend-protocol ReqPattern
   clojure.lang.IFn
   (req-fn [pattern]
-    pattern))
+    (if (map? pattern)
+      (fn [request]
+        (match? pattern request))
+      pattern)))
 
 (defn decorator-match? [req-pattern request]
   (let [fun (req-fn req-pattern)]
@@ -141,7 +138,10 @@
 (extend-protocol RespPattern
   clojure.lang.IFn
   (decorator [pattern]
-    pattern))
+    (if (map? pattern)
+      (fn [_ _]
+        pattern)
+      pattern)))
 
 (extend-protocol RespPattern
   Long

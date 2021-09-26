@@ -100,17 +100,22 @@
 
 (defn content-put [db {{:keys [owner repo path]} :path-params
                         {:keys [content message branch]} :body}]
-  (let [repo' (d/entity db [:repo/owner+name (d/entity db [:owner/name owner]) repo])
-        branch' (d/entity db [:ref/repo+type+name (:db/id repo') :branch (or branch (:repo/default_branch repo'))])
-        tree (jgit/create-tree-datoms! repo' {:tree [{:path path :type "blob" :mode "100644" :content content}]})]
-    (jgit/create-commit-datoms! repo' tree {:message message
-                                            :parents [(-> branch' :ref/commit :object/sha)]})))
+  (let [repo' (d/entity db [:repo/owner+name [(d/entid db [:owner/name owner]) repo]])
+        branch' (d/entity db [:ref/repo+type+name [(:db/id repo') :branch (or branch (:repo/default_branch repo'))]])
+        tree (jgit/create-tree-datoms! repo' {:tree [{:path path :type "blob" :mode "100644" :content (base64/decode content "UTF-8")}]
+                                              :base_tree (-> branch' :ref/commit :commit/tree :object/sha)})
+        commit (jgit/create-commit-datoms! repo' tree {:message message
+                                                       :tree (:object/sha tree)
+                                                       :parents [(-> branch' :ref/commit :object/sha)]})]
+    {:ref/repo+type+name [(:db/id repo') :branch (or branch (:repo/default_branch repo'))]
+     :ref/commit commit}))
 
-(defn content-put-body [commit {{:keys [owner repo path]} :path-params conn :conn}]
+;TODO fix content sha (should be sha of the blob and not commit)
+(defn content-put-body [ref {{:keys [owner repo path]} :path-params conn :conn}]
   (let [db @conn
-        repo' (d/entity db [:repo/owner+name [(d/entid db owner)] repo])]
-    {:content (content-body {:repo repo' :path path :sha (:object/sha commit)})
-     :commit (commit-body commit)}))
+        repo' (d/entity db [:repo/owner+name [(d/entid db [:owner/name owner]) repo]])]
+    {:content (content-body {:repo repo' :path path :sha (-> ref :ref/commit :object/sha)})
+     :commit (commit-body (:ref/commit ref))}))
 
 (defn routes [meta-db]
   [["/orgs/:org/repos" {:get (handlers/list-resource-handler meta-db :repo repo-list)
@@ -122,5 +127,5 @@
                                                       :body-fn branch-body})}]
     ["/contents/*path" {:get (handlers/get-handler {:lookup-fn content-lookup
                                                     :body-fn content-body})
-                        :put (handlers/post-handler {:put-fn (handlers/db-transact-fn content-put)
+                        :put (handlers/put-handler {:put-fn (handlers/db-transact-fn content-put)
                                                      :body-fn content-put-body})}]]])

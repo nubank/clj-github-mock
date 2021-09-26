@@ -10,8 +10,8 @@
 (defn httpkit-fake-handler
   "Creates a `ring-handler` that is compatible with `http-kit-fake`. Receives the same
   options as `ring-handler."
-  [meta-db conn]
-  (let [handler (mock-resource/json-handler meta-db conn)]
+  [meta-db conn middleware]
+  (let [handler (mock-resource/json-handler meta-db conn middleware)]
     (fn [_ {:keys [method url body headers] :as req} _]
       (handler (merge (reduce
                        (fn [req [header value]]
@@ -27,7 +27,7 @@
     [:let [meta-db# (mock-resource/meta-db)
            conn# (mock-resource/conn meta-db# {})
            middleware# (atom [])]]
-    (flow/swap-state assoc ::conn conn# ::meta-db meta-db# ::midleware middleware#)
+    (flow/swap-state assoc ::conn conn# ::meta-db meta-db# ::middleware middleware#)
     (state/wrap-with
      (fn [f#]
        (fake/with-fake-http
@@ -41,7 +41,7 @@
   (flow/flow
    "github-midleware"
    (flow/get-state
-    (fn [{middleware ::midleware}]
+    (fn [{middleware ::middleware}]
       (reset! middleware pairs)))
    flow
    (flow/get-state
@@ -51,7 +51,7 @@
 (defn gen-ents [query]
   (flow/get-state
    (fn [{conn ::conn meta-db ::meta-db}]
-     (mock-gen/gen-ents conn meta-db query))))
+     (mock-gen/gen-ents meta-db conn query))))
 
 (defn q [datalog & args]
   (flow/get-state
