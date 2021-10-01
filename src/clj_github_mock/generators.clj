@@ -110,7 +110,7 @@
        (into {})))
 
 (defn- ent-data [ent-db ent]
-  (:inserted-data (sm/ent-attrs ent-db ent)))
+  (:updated-data (sm/ent-attrs ent-db ent)))
 
 (defn- ent-attrs-map [ent-db]
   (let [ents (sm/ents ent-db)]
