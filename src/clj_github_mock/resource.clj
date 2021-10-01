@@ -34,6 +34,7 @@
   (-> (d/empty-db meta-db-schema)
       (d/db-with [org/owner-resource
                   repo/repo-resource
+                  repo/branch-resource
                   git-database/object-resource
                   git-database/blob-resource
                   git-database/tree-item-resource

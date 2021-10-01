@@ -57,6 +57,39 @@
               [?r :repo/owner ?o]] db org)
        (map #(d/entity db %))))
 
+(defn- content->tree [content]
+  (mapv
+   (fn [[path file-content]]
+     {:path path :mode "100644" :type "blob" :content file-content})
+   content))
+
+(defn- create-commit [repo content]
+  (let [tree (jgit/create-tree-datoms! repo {:tree (content->tree content)})]
+    (jgit/create-commit-datoms!
+     repo
+     tree
+     {:tree (:object/sha tree)
+      :message "initial commit"})))
+
+(defn branch-transact [db {:branch/keys [name repo content base] :as branch}]
+  [{:db/id (:db/id branch)
+    :ref/name name
+    :ref/type :branch
+    :ref/repo repo
+    :ref/commit (if base
+                  (:ref/commit (d/entity db base))
+                  (create-commit (d/entity db repo) content))}])
+
+(def branch-resource
+  {:resource/name :branch
+   :specmonstah/transact-fn branch-transact
+   :resource/attributes
+   [{:attribute/name :name
+     :specmonstah/key? true}
+    {:attribute/name :repo
+     :attribute/ref {:resource/name :repo}}
+    {:attribute/name :content}]})
+
 (defn branch-key [db {{:keys [owner repo branch]} :path-params}]
   [:ref/repo+type+name [(d/entid db [:repo/owner+name [(d/entid db [:owner/name owner]) repo]]) :branch branch]])
 
