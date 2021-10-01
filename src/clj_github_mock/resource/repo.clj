@@ -4,7 +4,8 @@
             [clj-github-mock.handlers :as handlers]
             [clj-github-mock.impl.jgit :as jgit]
             [base64-clj.core :as base64]
-            [clj-github-mock.resource.generators :as resource-gen]))
+            [clj-github-mock.resource.generators :as resource-gen]
+            [medley.core :as m]))
 
 (defn full-name [repo]
   (string/join "/" [(-> repo :repo/owner :owner/name) (:repo/name repo)]))
@@ -72,19 +73,24 @@
       :message "initial commit"})))
 
 (defn branch-transact [db {:branch/keys [name repo content base] :as branch}]
-  [{:db/id (:db/id branch)
-    :ref/name name
-    :ref/type :branch
-    :ref/repo repo
-    :ref/commit (if base
-                  (-> (d/entity db [:ref/repo+type+name [(d/entid db repo) :branch base]]) :ref/commit :db/id)
-                  (create-commit (d/entity db repo) content))}])
+  [(-> {:db/id (:db/id branch)
+        :ref/name name
+        :ref/type :branch
+        :ref/repo repo}
+       (m/assoc-some :ref/commit (when-not base
+                                   (create-commit (d/entity db repo) content))))])
+
+(defn branch-update [db {:branch/keys [name repo content base] :as branch}]
+  (if base
+    [{:ref/repo+type+name [(d/entid db repo) :branch name]
+      :ref/commit (-> (d/entity db [:ref/repo+type+name [(d/entid db repo) :branch base]]) :ref/commit :db/id)}]
+    []))
 
 ; TODO support branch generation (ie. add schemas to name and context so user is not required to set those)
-; TODO with specmonstah we cannot control the order of entity creation, so :branch/base only works if one gets the order right 
 (def branch-resource
   {:resource/name :branch
    :specmonstah/transact-fn branch-transact
+   :specmonstah/update-fn branch-update
    :resource/attributes
    [{:attribute/name :name}
     {:attribute/name :repo

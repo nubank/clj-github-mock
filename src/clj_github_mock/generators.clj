@@ -50,8 +50,13 @@
         {{:strs [eid]} :tempids db :db-after} (d/transact! database [[:db.fn/call transact-fn datoms]])]
     (d/entity db eid)))
 
-(defn- insert [database ent-db ent-attrs]
-  (insert-datascript database ent-db ent-attrs))
+(defn- update-datascript [database ent-db {:keys [ent-type inserted-data spec-gen] :as ent-attrs}]
+  (if-let [update-fn (-> ent-db :schema ent-type :update-fn)]
+    (let [datoms (-> (assoc-ent-at-foreign-keys ent-db ent-attrs)
+                     (assoc :db/id "eid"))
+          {{:strs [eid]} :tempids db :db-after} (d/transact! database [[:db.fn/call update-fn datoms]])]
+      (d/entity db eid))
+    inserted-data))
 
 (defn- attribute->malli-schema [{:attribute/keys [schema default]}]
   (cond
@@ -95,7 +100,8 @@
   (-> {:prefix (:resource/name resource)
        :generator (resource->generator resource)}
       (m/assoc-some :relations (resource->relations resource))
-      (m/assoc-some :transact-fn (:specmonstah/transact-fn resource))))
+      (m/assoc-some :transact-fn (:specmonstah/transact-fn resource))
+      (m/assoc-some :update-fn (:specmonstah/update-fn resource))))
 
 (defn- meta-db->specmonstah-schema [meta-db]
   (->> (resource/concrete-resources meta-db)
@@ -119,7 +125,8 @@
                                          :gen-options {:rnd-state (atom rnd)
                                                        :size size}}
                                         query)
-                      (sm/visit-ents-once :inserted-data (partial insert conn)))]
+                      (sm/visit-ents-once :inserted-data (partial insert-datascript conn))
+                      (sm/visit-ents-once :updated-data (partial update-datascript conn)))]
        (rose/pure
         (merge
          {:conn conn
