@@ -81,6 +81,7 @@
                   (create-commit (d/entity db repo) content))}])
 
 ; TODO support branch generation (ie. add schemas to name and context so user is not required to set those)
+; TODO with specmonstah we cannot control the order of entity creation, so :branch/base only works if one gets the order right 
 (def branch-resource
   {:resource/name :branch
    :specmonstah/transact-fn branch-transact
