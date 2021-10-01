@@ -77,15 +77,15 @@
     :ref/type :branch
     :ref/repo repo
     :ref/commit (if base
-                  (:ref/commit (d/entity db base))
+                  (-> (d/entity db [:ref/repo+type+name [(d/entid db repo) :branch base]]) :ref/commit :db/id)
                   (create-commit (d/entity db repo) content))}])
 
+; TODO support branch generation (ie. add schemas to name and context so user is not required to set those)
 (def branch-resource
   {:resource/name :branch
    :specmonstah/transact-fn branch-transact
    :resource/attributes
-   [{:attribute/name :name
-     :specmonstah/key? true}
+   [{:attribute/name :name}
     {:attribute/name :repo
      :attribute/ref {:resource/name :repo}}
     {:attribute/name :content}]})
