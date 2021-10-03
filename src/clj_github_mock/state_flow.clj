@@ -52,8 +52,3 @@
   (flow/get-state
    (fn [{conn ::conn meta-db ::meta-db}]
      (mock-gen/gen-ents meta-db conn query))))
-
-(defn q [datalog & args]
-  (flow/get-state
-   (fn [{conn ::conn}]
-     (apply d/q datalog @conn args))))
