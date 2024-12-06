@@ -1,5 +1,9 @@
 # Changelog
 
+ ## 0.4.0
+- **[BREAKING]** Include line breaks every 60 characters in base64 encoded strings to mirror what the actual GitHub API does
+- Add support for Git blobs endpoints (https://docs.github.com/en/rest/git/blobs?apiVersion=2022-11-28#get-a-blob)
+
 ## 0.3.0
 - Correctly handle binary files in create-blob! and get-blob operations
 - Fix reflective accesses in clj-github-mock.impl.jgit
