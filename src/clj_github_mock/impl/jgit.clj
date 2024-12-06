@@ -3,14 +3,17 @@
             [clojure.set :as set]
             [clojure.string :as string])
   (:import [org.eclipse.jgit.internal.storage.dfs DfsRepositoryDescription InMemoryRepository]
-           [org.eclipse.jgit.lib AnyObjectId CommitBuilder Constants FileMode ObjectId ObjectReader PersonIdent TreeFormatter]
+           [org.eclipse.jgit.lib AnyObjectId CommitBuilder Constants FileMode ObjectId
+                                 ObjectInserter ObjectReader PersonIdent Repository TreeFormatter]
            [org.eclipse.jgit.revwalk RevCommit]
            [org.eclipse.jgit.treewalk TreeWalk]))
+
+(set! *warn-on-reflection* true)
 
 (defn empty-repo []
   (InMemoryRepository. (DfsRepositoryDescription.)))
 
-(defn- new-inserter [repo]
+(defn- new-inserter ^ObjectInserter [^Repository repo]
   (-> repo (.getObjectDatabase) (.newInserter)))
 
 (defmacro with-inserter [[inserter repo] & body]
@@ -19,14 +22,14 @@
      (.flush ~inserter)
      result#))
 
-(defn- new-reader [repo]
+(defn- new-reader [^Repository repo]
   (-> repo (.getObjectDatabase) (.newReader)))
 
-(defn- load-object [reader object-id]
+(defn- load-object [^ObjectReader reader ^ObjectId object-id]
   (let [object-loader (.open reader object-id)]
     (.getBytes object-loader)))
 
-(defn- insert-blob [inserter {:keys [content]}]
+(defn- insert-blob [^ObjectInserter inserter {:keys [content]}]
   (let [^bytes bs (if (bytes? content) content (.getBytes ^String content "UTF-8"))]
     (.insert inserter Constants/OBJ_BLOB bs)))
 
@@ -53,7 +56,7 @@
                                        FileMode/GITLINK "commit"
                                        FileMode/SYMLINK "blob"})
 
-(defn- tree-walk-seq [tree-walk]
+(defn- tree-walk-seq [^TreeWalk tree-walk]
   (lazy-seq
    (when (.next tree-walk)
      (cons {:path (.getPathString tree-walk)
@@ -62,16 +65,16 @@
             :sha (ObjectId/toString (.getObjectId tree-walk 0))}
            (tree-walk-seq tree-walk)))))
 
-(defn tree-walk [repo sha]
+(defn tree-walk [^Repository repo sha]
   (doto (TreeWalk. repo)
     (.reset (ObjectId/fromString sha))))
 
 (defn split-path [path]
   (string/split path #"/"))
 
-(defn path-sha [repo base_tree path]
+(defn path-sha [^Repository repo base_tree ^String path]
   (when base_tree
-    (when-let [tree-walk (TreeWalk/forPath repo path (into-array ObjectId [(ObjectId/fromString base_tree)]))]
+    (when-let [tree-walk (TreeWalk/forPath repo path ^"[Lorg.eclipse.jgit.lib.AnyObjectId;" (into-array ObjectId [(ObjectId/fromString base_tree)]))]
       (ObjectId/toString (.getObjectId tree-walk 0)))))
 
 (defn leaf-item? [item]
@@ -101,16 +104,16 @@
 
 (declare insert-tree)
 
-(defn content->object-id [{:keys [type content base_tree] :as blob} repo inserter]
+(defn content->object-id ^ObjectId [{:keys [type content base_tree] :as blob} repo inserter]
   (case type
     "blob" (insert-blob inserter blob)
     "tree" (insert-tree repo inserter content base_tree)))
 
-(defn append-tree-item [{:keys [path mode sha content] :as item} repo tree-formatter inserter]
+(defn append-tree-item [{:keys [^String path mode sha content] :as item} repo ^TreeFormatter tree-formatter inserter]
   (when (or content sha)
     (.append tree-formatter
              path
-             (github-mode->file-mode mode)
+             ^FileMode (github-mode->file-mode mode)
              (if sha
                (ObjectId/fromString sha)
                (content->object-id item repo inserter)))))
@@ -184,7 +187,7 @@
     {:sha sha
      :message (.getFullMessage commit)
      :tree {:sha (-> commit (.getTree) (.getId) (.getName))}
-     :parents (mapv #(hash-map :sha (ObjectId/toString (.getId %))) (.getParents commit))}))
+     :parents (mapv #(hash-map :sha (ObjectId/toString (.getId ^RevCommit %))) (.getParents commit))}))
 
 (defn create-commit! [repo {:keys [tree message parents]}]
   (let [commit-id (with-inserter [inserter repo]
@@ -193,28 +196,28 @@
                                            (.setTreeId (ObjectId/fromString tree))
                                            (.setAuthor (PersonIdent. "me" "me@example.com"))
                                            (.setCommitter (PersonIdent. "me" "me@example.com"))
-                                           (.setParentIds (into-array ObjectId (map #(ObjectId/fromString %) parents))))]
+                                           (.setParentIds ^"[Lorg.eclipse.jgit.lib.ObjectId;" (into-array ObjectId (map #(ObjectId/fromString %) parents))))]
                       (.insert inserter commit-builder)))]
     (get-commit repo (ObjectId/toString commit-id))))
 
-(defn get-reference [repo ref-name]
+(defn get-reference [^Repository repo ^String ref-name]
   (when-let [ref (.exactRef repo ref-name)]
     {:ref ref-name
      :object {:type "commit"
               :sha (ObjectId/toString (.getObjectId ref))}}))
 
-(defn create-reference! [repo {:keys [ref sha]}]
+(defn create-reference! [^Repository repo {:keys [^String ref sha]}]
   (let [ref-update  (.updateRef repo ref)]
     (doto ref-update
       (.setNewObjectId (ObjectId/fromString sha))
       (.update))
     (get-reference repo ref)))
 
-(defn delete-reference! [repo ref]
+(defn delete-reference! [^Repository repo ^String ref]
   (.delete
    (doto (.updateRef repo ref) (.setForceUpdate true))))
 
-(defn get-branch [repo branch]
+(defn get-branch [^Repository repo ^String branch]
   (when-let [ref (.findRef repo branch)]
     (let [commit (get-commit repo (ObjectId/toString (.getObjectId ref)))]
       {:name branch
@@ -225,7 +228,7 @@
   (let [reader (new-reader repo)
         commit (RevCommit/parse (load-object reader (ObjectId/fromString sha)))
         tree-id (-> commit (.getTree) (.getId))
-        tree-walk (TreeWalk/forPath ^ObjectReader reader ^String path (into-array AnyObjectId [tree-id]))
+        tree-walk (TreeWalk/forPath ^ObjectReader reader ^String path ^"[Lorg.eclipse.jgit.lib.AnyObjectId;" (into-array AnyObjectId [tree-id]))
         object-id (when tree-walk (.getObjectId tree-walk 0))]
     (when object-id
       (let [content (load-object reader object-id)]
