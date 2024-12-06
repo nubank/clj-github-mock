@@ -187,8 +187,8 @@
 
 (def get-commit-response-schema
   [:map
-   [:status [:= 200]
-    :body [:map
+   [:status [:= 200]]
+   [:body [:map
            [:sha :string]
            [:tree [:map
                    [:sha :string]]]
