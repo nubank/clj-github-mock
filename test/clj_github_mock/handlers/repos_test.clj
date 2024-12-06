@@ -1,6 +1,6 @@
 (ns clj-github-mock.handlers.repos-test
-  (:require [base64-clj.core :as base64]
-            [clj-github-mock.generators :as mock-gen]
+  (:require [clj-github-mock.generators :as mock-gen]
+            [clj-github-mock.impl.base64 :as base64]
             [clj-github-mock.impl.database :as database]
             [clj-github-mock.impl.jgit :as jgit]
             [clojure.data :as data]
@@ -282,7 +282,7 @@
    (= {:status 200
        :body {:type "file"
               :path (:path file)
-              :content (base64/encode (:content file) "UTF-8")}}
+              :content (base64/encode (:content file))}}
       (handler (get-content-request (:org/name org0) (:repo/name repo0) (:path file) (-> branch :commit :sha))))))
 
 (defspec get-content-supports-refs
@@ -294,7 +294,7 @@
    (= {:status 200
        :body {:type "file"
               :path (:path file)
-              :content (base64/encode (:content file) "UTF-8")}}
+              :content (base64/encode (:content file))}}
       (handler (get-content-request (:org/name org0) (:repo/name repo0) (:path file) (:name branch))))))
 
 (defspec get-content-supports-default-branch
@@ -307,5 +307,5 @@
    (= {:status 200
        :body {:type "file"
               :path (:path file)
-              :content (base64/encode (:content file) "UTF-8")}}
+              :content (base64/encode (:content file))}}
       (handler (get-content-request (:org/name org0) (:repo/name repo0) (:path file))))))

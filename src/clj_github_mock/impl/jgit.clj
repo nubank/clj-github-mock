@@ -1,5 +1,5 @@
 (ns clj-github-mock.impl.jgit
-  (:require [base64-clj.core :as base64]
+  (:require [clj-github-mock.impl.base64 :as base64]
             [clojure.set :as set]
             [clojure.string :as string])
   (:import [org.eclipse.jgit.internal.storage.dfs DfsRepositoryDescription InMemoryRepository]
@@ -36,7 +36,7 @@
 
 (defn get-blob [repo sha]
   (let [content (String. (load-object (new-reader repo) (ObjectId/fromString sha)) "UTF-8")]
-    {:content (base64/encode content "UTF-8")}))
+    {:content (base64/encode content)}))
 
 (def ^:private github-mode->file-mode {"100644" FileMode/REGULAR_FILE
                                        "100755" FileMode/EXECUTABLE_FILE
@@ -228,4 +228,4 @@
       (let [content (String. (load-object reader object-id) "UTF-8")]
         {:type "file"
          :path path
-         :content (base64/encode content "UTF-8")}))))
+         :content (base64/encode content)}))))

@@ -1,6 +1,6 @@
 (ns clj-github-mock.impl.jgit-test
-  (:require  [base64-clj.core :as base64]
-             [clj-github-mock.generators :as mock-gen]
+  (:require  [clj-github-mock.generators :as mock-gen]
+             [clj-github-mock.impl.base64 :as base64]
              [clj-github-mock.impl.jgit :as sut]
              [clojure.test.check.clojure-test :refer [defspec]]
              [clojure.test.check.generators :as gen]
@@ -12,7 +12,7 @@
 (defn decode-base64 [content]
   (if (empty? content)
     content
-    (base64/decode content "UTF-8")))
+    (base64/decode content)))
 
 (defspec blob-is-added-to-repo
   (prop/for-all
@@ -40,7 +40,7 @@
   (->> changes
        (mapv (fn [{:keys [path content]}]
                (if content
-                 [(into (sut/split-path path) [:content]) :r (base64/encode content "UTF-8")]
+                 [(into (sut/split-path path) [:content]) :r (base64/encode content)]
                  [(sut/split-path path) :-])))
        (editscript/edits->script)))
 
@@ -123,6 +123,6 @@
          {:keys [sha]} (sut/create-commit! repo {:tree tree-sha :message "test" :parents []})]
      (every? #(= {:type "file"
                   :path (:path %)
-                  :content (base64/encode (:content %) "UTF-8")}
+                  :content (base64/encode (:content %))}
                  (sut/get-content repo sha (:path %)))
              tree))))

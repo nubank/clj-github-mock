@@ -18,7 +18,6 @@
                  ; NOTE: can't upgrade to 7.X because it doesn't support JDK 11 anymore
                  [org.eclipse.jgit/org.eclipse.jgit "6.10.0.202406032230-r"]
                  [metosin/reitit-ring "0.7.2"]
-                 [base64-clj "0.1.1"]
                  [ring/ring-json "0.5.1"]
                  [ring/ring-mock "0.4.0"]
                  [datascript "1.7.3"]]
