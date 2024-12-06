@@ -23,9 +23,7 @@
                  [datascript "1.7.3"]]
 
   :profiles {:dev {:plugins [[lein-project-version "0.1.0"]]
-                   :dependencies [[clj-http "3.13.0"]
-                                  [clj-http-fake "1.0.4"]
-                                  [org.clojure/test.check "1.1.1"]
+                   :dependencies [[org.clojure/test.check "1.1.1"]
                                   [nubank/matcher-combinators "3.9.1"]
                                   [metosin/malli "0.16.4"]
                                   [lambdaisland/regal "0.1.175"]
