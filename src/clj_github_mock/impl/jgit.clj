@@ -231,6 +231,7 @@
                 :commit (dissoc commit :sha)}})))
 
 (defn get-content [repo sha path]
+  ; https://docs.github.com/en/rest/repos/contents?apiVersion=2022-11-28#get-repository-content
   (let [reader (new-reader repo)
         commit (RevCommit/parse (load-object reader (ObjectId/fromString sha)))
         tree-id (-> commit (.getTree) (.getId))
@@ -240,4 +241,5 @@
       (let [content (load-object reader object-id)]
         {:type "file"
          :path path
+         :encoding "base64"
          :content (base64/encode-bytes->str content)}))))

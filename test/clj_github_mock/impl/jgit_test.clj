@@ -133,6 +133,7 @@
          {:keys [sha]} (sut/create-commit! repo {:tree tree-sha :message "test" :parents []})]
      (every? #(= {:type "file"
                   :path (:path %)
+                  :encoding "base64"
                   :content (base64/encode-str->str (:content %))}
                  (sut/get-content repo sha (:path %)))
              tree))))

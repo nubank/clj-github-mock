@@ -283,6 +283,7 @@
    (= {:status 200
        :body {:type "file"
               :path (:path file)
+              :encoding "base64"
               :content (base64/encode-str->str (:content file))}}
       (handler (get-content-request (:org/name org0) (:repo/name repo0) (:path file) (-> branch :commit :sha))))))
 
@@ -339,6 +340,7 @@
    (= {:status 200
        :body {:type "file"
               :path (:path file)
+              :encoding "base64"
               :content (base64/encode-str->str (:content file))}}
       (handler (get-content-request (:org/name org0) (:repo/name repo0) (:path file) (:name branch))))))
 
@@ -352,5 +354,6 @@
    (= {:status 200
        :body {:type "file"
               :path (:path file)
+              :encoding "base64"
               :content (base64/encode-str->str (:content file))}}
       (handler (get-content-request (:org/name org0) (:repo/name repo0) (:path file))))))
