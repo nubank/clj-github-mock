@@ -4,7 +4,7 @@
             [clojure.string :as string])
   (:import [org.eclipse.jgit.internal.storage.dfs DfsRepositoryDescription InMemoryRepository]
            [org.eclipse.jgit.lib AnyObjectId CommitBuilder Constants FileMode ObjectId
-                                 ObjectInserter ObjectReader PersonIdent Repository TreeFormatter]
+            ObjectInserter ObjectReader PersonIdent Repository TreeFormatter]
            [org.eclipse.jgit.revwalk RevCommit]
            [org.eclipse.jgit.treewalk TreeWalk]))
 

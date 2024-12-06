@@ -25,11 +25,11 @@
 
 (defspec binary-blob-is-added-to-repo
   (prop/for-all
-    [^bytes content gen/bytes]
-    (let [repo (sut/empty-repo)
-          {:keys [sha]} (sut/create-blob! repo {:content content})]
-      (Arrays/equals content
-                     (base64/decode-str->bytes (:content (sut/get-blob repo sha)))))))
+   [^bytes content gen/bytes]
+   (let [repo (sut/empty-repo)
+         {:keys [sha]} (sut/create-blob! repo {:content content})]
+     (Arrays/equals content
+                    (base64/decode-str->bytes (:content (sut/get-blob repo sha)))))))
 
 (defspec tree-is-added-to-repo
   (prop/for-all
