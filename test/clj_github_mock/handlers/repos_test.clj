@@ -282,7 +282,7 @@
    (= {:status 200
        :body {:type "file"
               :path (:path file)
-              :content (base64/encode (:content file))}}
+              :content (base64/encode-str->str (:content file))}}
       (handler (get-content-request (:org/name org0) (:repo/name repo0) (:path file) (-> branch :commit :sha))))))
 
 (defspec get-content-supports-refs
@@ -294,7 +294,7 @@
    (= {:status 200
        :body {:type "file"
               :path (:path file)
-              :content (base64/encode (:content file))}}
+              :content (base64/encode-str->str (:content file))}}
       (handler (get-content-request (:org/name org0) (:repo/name repo0) (:path file) (:name branch))))))
 
 (defspec get-content-supports-default-branch
@@ -307,5 +307,5 @@
    (= {:status 200
        :body {:type "file"
               :path (:path file)
-              :content (base64/encode (:content file))}}
+              :content (base64/encode-str->str (:content file))}}
       (handler (get-content-request (:org/name org0) (:repo/name repo0) (:path file))))))

@@ -27,7 +27,8 @@
     (.getBytes object-loader)))
 
 (defn- insert-blob [inserter {:keys [content]}]
-  (.insert inserter Constants/OBJ_BLOB (.getBytes content "UTF-8")))
+  (let [^bytes bs (if (bytes? content) content (.getBytes ^String content "UTF-8"))]
+    (.insert inserter Constants/OBJ_BLOB bs)))
 
 (defn create-blob! [repo blob]
   (with-inserter [inserter repo]
@@ -35,8 +36,8 @@
       {:sha (ObjectId/toString object-id)})))
 
 (defn get-blob [repo sha]
-  (let [content (String. (load-object (new-reader repo) (ObjectId/fromString sha)) "UTF-8")]
-    {:content (base64/encode content)}))
+  (let [content (load-object (new-reader repo) (ObjectId/fromString sha))]
+    {:content (base64/encode-bytes->str content)}))
 
 (def ^:private github-mode->file-mode {"100644" FileMode/REGULAR_FILE
                                        "100755" FileMode/EXECUTABLE_FILE
@@ -143,7 +144,9 @@
               (if (= "tree" type)
                 (flatten-tree repo sha (concat-path base-path path))
                 [(-> (merge tree-item (get-blob repo (:sha tree-item)))
-                     (update :content #(if (string/blank? %) % (base64/decode %)))
+                     ; NOTE: when reading the flattened tree, contents are always assumed to be a String
+                     ;       (needed for backwards compatibility)
+                     (update :content #(if (string/blank? %) % (base64/decode-str->str %)))
                      (update :path (partial concat-path base-path))
                      (dissoc :sha))]))
             tree)))
@@ -225,7 +228,7 @@
         tree-walk (TreeWalk/forPath ^ObjectReader reader ^String path (into-array AnyObjectId [tree-id]))
         object-id (when tree-walk (.getObjectId tree-walk 0))]
     (when object-id
-      (let [content (String. (load-object reader object-id) "UTF-8")]
+      (let [content (load-object reader object-id)]
         {:type "file"
          :path path
-         :content (base64/encode content)}))))
+         :content (base64/encode-bytes->str content)}))))

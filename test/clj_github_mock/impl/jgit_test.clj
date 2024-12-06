@@ -7,20 +7,29 @@
              [clojure.test.check.properties :as prop]
              [editscript.core :as editscript]
              [matcher-combinators.matchers :as matchers]
-             [matcher-combinators.standalone :refer [match?]]))
+             [matcher-combinators.standalone :refer [match?]])
+  (:import (java.util Arrays)))
 
 (defn decode-base64 [content]
   (if (empty? content)
     content
-    (base64/decode content)))
+    (base64/decode-str->str content)))
 
-(defspec blob-is-added-to-repo
+(defspec string-blob-is-added-to-repo
   (prop/for-all
    [content gen/string]
    (let [repo (sut/empty-repo)
          {:keys [sha]} (sut/create-blob! repo {:content content})]
      (= content
         (decode-base64 (:content (sut/get-blob repo sha)))))))
+
+(defspec binary-blob-is-added-to-repo
+  (prop/for-all
+    [^bytes content gen/bytes]
+    (let [repo (sut/empty-repo)
+          {:keys [sha]} (sut/create-blob! repo {:content content})]
+      (Arrays/equals content
+                     (base64/decode-str->bytes (:content (sut/get-blob repo sha)))))))
 
 (defspec tree-is-added-to-repo
   (prop/for-all
@@ -40,7 +49,7 @@
   (->> changes
        (mapv (fn [{:keys [path content]}]
                (if content
-                 [(into (sut/split-path path) [:content]) :r (base64/encode content)]
+                 [(into (sut/split-path path) [:content]) :r (base64/encode-str->str content)]
                  [(sut/split-path path) :-])))
        (editscript/edits->script)))
 
@@ -123,6 +132,6 @@
          {:keys [sha]} (sut/create-commit! repo {:tree tree-sha :message "test" :parents []})]
      (every? #(= {:type "file"
                   :path (:path %)
-                  :content (base64/encode (:content %))}
+                  :content (base64/encode-str->str (:content %))}
                  (sut/get-content repo sha (:path %)))
              tree))))
