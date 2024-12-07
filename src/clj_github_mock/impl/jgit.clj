@@ -29,8 +29,11 @@
   (let [object-loader (.open reader object-id)]
     (.getBytes object-loader)))
 
-(defn- insert-blob [^ObjectInserter inserter {:keys [content]}]
-  (let [^bytes bs (if (bytes? content) content (.getBytes ^String content "UTF-8"))]
+(defn- insert-blob [^ObjectInserter inserter {:keys [content encoding]}]
+  ; https://docs.github.com/en/rest/git/blobs?apiVersion=2022-11-28#create-a-blob
+  (let [^bytes bs (if (= encoding "base64")
+                    (base64/decode-str->bytes content)
+                    (.getBytes ^String content "UTF-8"))]
     (.insert inserter Constants/OBJ_BLOB bs)))
 
 (defn create-blob! [repo blob]
@@ -39,8 +42,10 @@
       {:sha (ObjectId/toString object-id)})))
 
 (defn get-blob [repo sha]
+  ; https://docs.github.com/en/rest/git/blobs?apiVersion=2022-11-28#get-a-blob
   (let [content (load-object (new-reader repo) (ObjectId/fromString sha))]
-    {:content (base64/encode-bytes->str content)}))
+    {:content (base64/encode-bytes->str content)
+     :encoding "base64"}))
 
 (def ^:private github-mode->file-mode {"100644" FileMode/REGULAR_FILE
                                        "100755" FileMode/EXECUTABLE_FILE
@@ -150,6 +155,7 @@
                      ; NOTE: when reading the flattened tree, contents are always assumed to be a String
                      ;       (needed for backwards compatibility)
                      (update :content #(if (string/blank? %) % (base64/decode-str->str %)))
+                     (assoc :encoding "utf-8")
                      (update :path (partial concat-path base-path))
                      (dissoc :sha))]))
             tree)))
@@ -225,6 +231,7 @@
                 :commit (dissoc commit :sha)}})))
 
 (defn get-content [repo sha path]
+  ; https://docs.github.com/en/rest/repos/contents?apiVersion=2022-11-28#get-repository-content
   (let [reader (new-reader repo)
         commit (RevCommit/parse (load-object reader (ObjectId/fromString sha)))
         tree-id (-> commit (.getTree) (.getId))
@@ -234,4 +241,5 @@
       (let [content (load-object reader object-id)]
         {:type "file"
          :path path
+         :encoding "base64"
          :content (base64/encode-bytes->str content)}))))

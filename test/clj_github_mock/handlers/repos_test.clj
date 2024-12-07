@@ -11,7 +11,8 @@
             [malli.core :as m]
             [matcher-combinators.standalone :refer [match?]]
             [matcher-combinators.test]
-            [ring.mock.request :as mock]))
+            [ring.mock.request :as mock])
+  (:import (java.util Arrays)))
 
 (defn org-repos-path [org-name]
   (str "/orgs/" org-name "/repos"))
@@ -282,8 +283,53 @@
    (= {:status 200
        :body {:type "file"
               :path (:path file)
+              :encoding "base64"
               :content (base64/encode-str->str (:content file))}}
       (handler (get-content-request (:org/name org0) (:repo/name repo0) (:path file) (-> branch :commit :sha))))))
+
+(defn create-binary-blob-request [org repo contents]
+  (let [path (str "/repos/" org "/" repo "/git/blobs")
+        req (mock/request :post path)
+        body {:content  (base64/encode-bytes->str contents)
+              :encoding "base64"}]
+    (assoc req :body body)))
+
+(defn create-string-blob-request [org repo contents]
+  (let [path (str "/repos/" org "/" repo "/git/blobs")
+        req (mock/request :post path)
+        body {:content  contents}]
+    (assoc req :body body)))
+
+(defn get-blob-request [org repo sha]
+  (let [path (str "/repos/" org "/" repo "/git/blobs/" sha)
+        req (mock/request :get path)]
+    req))
+
+(defspec create-and-get-binary-blob
+  (prop/for-all
+    [{:keys [handler org0 repo0]} (mock-gen/database {:repo [[1]]})
+     ^bytes contents gen/bytes]
+    (let [{create-blob-status :status
+           {blob-sha :sha} :body} (handler (create-binary-blob-request (:org/name org0) (:repo/name repo0) contents))
+          {get-blob-status :status
+           get-blob-body :body} (handler (get-blob-request (:org/name org0) (:repo/name repo0) blob-sha))]
+      (and (= 201 create-blob-status)
+           (= 200 get-blob-status)
+           (= "base64" (:encoding get-blob-body))
+           (Arrays/equals contents (base64/decode-str->bytes (:content get-blob-body)))))))
+
+(defspec create-and-get-string-blob
+  (prop/for-all
+    [{:keys [handler org0 repo0]} (mock-gen/database {:repo [[1]]})
+     contents gen/string]
+    (let [{create-blob-status :status
+           {blob-sha :sha} :body} (handler (create-string-blob-request (:org/name org0) (:repo/name repo0) contents))
+          {get-blob-status :status
+           get-blob-body :body} (handler (get-blob-request (:org/name org0) (:repo/name repo0) blob-sha))]
+      (and (= 201 create-blob-status)
+           (= 200 get-blob-status)
+           (= "base64" (:encoding get-blob-body))
+           (= contents (base64/decode-str->str (:content get-blob-body)))))))
 
 (defspec get-content-supports-refs
   (prop/for-all
@@ -294,6 +340,7 @@
    (= {:status 200
        :body {:type "file"
               :path (:path file)
+              :encoding "base64"
               :content (base64/encode-str->str (:content file))}}
       (handler (get-content-request (:org/name org0) (:repo/name repo0) (:path file) (:name branch))))))
 
@@ -307,5 +354,6 @@
    (= {:status 200
        :body {:type "file"
               :path (:path file)
+              :encoding "base64"
               :content (base64/encode-str->str (:content file))}}
       (handler (get-content-request (:org/name org0) (:repo/name repo0) (:path file))))))

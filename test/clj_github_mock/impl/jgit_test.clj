@@ -27,7 +27,8 @@
   (prop/for-all
    [^bytes content gen/bytes]
    (let [repo (sut/empty-repo)
-         {:keys [sha]} (sut/create-blob! repo {:content content})]
+         {:keys [sha]} (sut/create-blob! repo {:content (base64/encode-bytes->str content)
+                                               :encoding "base64"})]
      (Arrays/equals content
                     (base64/decode-str->bytes (:content (sut/get-blob repo sha)))))))
 
@@ -132,6 +133,7 @@
          {:keys [sha]} (sut/create-commit! repo {:tree tree-sha :message "test" :parents []})]
      (every? #(= {:type "file"
                   :path (:path %)
+                  :encoding "base64"
                   :content (base64/encode-str->str (:content %))}
                  (sut/get-content repo sha (:path %)))
              tree))))

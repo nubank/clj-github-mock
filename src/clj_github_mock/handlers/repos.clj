@@ -49,6 +49,16 @@
      :body body}
     {:status 404}))
 
+(defn post-blob-handler [{{git-repo :repo/jgit} :repo
+                          body :body}]
+  {:status 201
+   :body (jgit/create-blob! git-repo body)})
+
+(defn get-blob-handler [{{git-repo :repo/jgit} :repo
+                         {:keys [sha]} :path-params}]
+  {:status 200
+   :body (jgit/get-blob git-repo sha)})
+
 (defn post-commit-handler [{{git-repo :repo/jgit} :repo
                             body :body}]
   {:status 201
@@ -126,6 +136,8 @@
          :patch patch-repo-handler}]
     ["/git/trees" {:post post-tree-handler}]
     ["/git/trees/:sha" {:get get-tree-handler}]
+    ["/git/blobs" {:post post-blob-handler}]
+    ["/git/blobs/:sha" {:get get-blob-handler}]
     ["/git/commits" {:post post-commit-handler}]
     ["/git/commits/:sha" {:get get-commit-handler}]
     ["/git/refs" {:post post-ref-handler}]
